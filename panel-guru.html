@@ -87,20 +87,26 @@
   </div>
 
   <!-- Tabel peserta -->
+  <p class="sm:hidden text-xs text-[var(--ink-soft)] mb-2 flex items-center gap-1">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+    Geser tabel untuk lihat kolom lainnya
+  </p>
   <div class="bg-white border border-[var(--line)] rounded-xl overflow-hidden">
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b border-[var(--line)]">
-          <th class="text-left px-4 py-3">Nama</th>
-          <th class="text-left px-4 py-3">Status</th>
-          <th class="text-left px-4 py-3">Progres</th>
-          <th class="text-left px-4 py-3">Mulai</th>
-          <th class="text-left px-4 py-3">Pelanggaran</th>
-          <th class="text-left px-4 py-3">Skor</th>
-        </tr>
-      </thead>
-      <tbody id="tabelBody"></tbody>
-    </table>
+    <div class="overflow-x-auto" style="-webkit-overflow-scrolling:touch;">
+      <table class="w-full text-sm" style="min-width:640px;">
+        <thead>
+          <tr class="border-b border-[var(--line)]">
+            <th class="text-left px-4 py-3">Nama</th>
+            <th class="text-left px-4 py-3">Status</th>
+            <th class="text-left px-4 py-3">Progres</th>
+            <th class="text-left px-4 py-3">Mulai</th>
+            <th class="text-left px-4 py-3">Pelanggaran</th>
+            <th class="text-left px-4 py-3">Skor</th>
+          </tr>
+        </thead>
+        <tbody id="tabelBody"></tbody>
+      </table>
+    </div>
     <p id="emptyState" class="hidden text-center text-sm text-[var(--ink-soft)] py-10">Tidak ada peserta yang cocok dengan pencarian.</p>
   </div>
 
