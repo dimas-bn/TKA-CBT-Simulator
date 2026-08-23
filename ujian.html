@@ -184,15 +184,15 @@
    KONFIGURASI SUPABASE — ganti dengan credential project kamu
    (Project Settings → API di dashboard Supabase)
    ========================================================= */
-const SUPABASE_URL = 'GANTI_DENGAN_PROJECT_URL';
-const SUPABASE_ANON_KEY = 'GANTI_DENGAN_ANON_KEY';
+const SUPABASE_URL = 'https://idbqhtjsvowncprmvgcu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkYnFodGpzdm93bmNwcm12Z2N1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NzI2NTQsImV4cCI6MjEwMzA0ODY1NH0.BpUxwo_oJO4TIl7Nleghtp7rIRIx8O7ojsxxvvX-BqA';
 const SESI_ID = '11111111-1111-1111-1111-111111111111'; // id dari tabel sesi_ujian
 
-const supabase = (SUPABASE_URL.startsWith('http'))
+const supabaseClient = (SUPABASE_URL.startsWith('http'))
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
-if (!supabase) {
+if (!supabaseClient) {
   console.warn('[Supabase] Belum dikonfigurasi — isi SUPABASE_URL & SUPABASE_ANON_KEY di atas.');
 }
 
@@ -247,9 +247,9 @@ function restoreLocal() {
    kalau Supabase belum dikonfigurasi, biar tetap bisa dites)
    ========================================================= */
 async function loadSoal() {
-  if (!supabase) return loadSoalMock();
+  if (!supabaseClient) return loadSoalMock();
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from('bank_soal')
     .select('id, teks, opsi')
     .eq('sesi_id', SESI_ID)
@@ -373,8 +373,8 @@ let saveTimeout = null;
 function simpanJawabanKeServer(soalId, jawaban) {
   clearTimeout(saveTimeout);
   saveTimeout = setTimeout(async () => {
-    if (!supabase) { console.log('[auto-save mock]', soalId, '→', jawaban); return; }
-    const { error } = await supabase
+    if (!supabaseClient) { console.log('[auto-save mock]', soalId, '→', jawaban); return; }
+    const { error } = await supabaseClient
       .from('jawaban')
       .upsert(
         { peserta_id: examState.pesertaId, soal_id: soalId, jawaban_terpilih: jawaban },
@@ -408,8 +408,8 @@ async function catatPelanggaran(jenis) {
   const entry = { jenis, waktu: new Date().toISOString() };
   examState.pelanggaran.push(entry);
   tampilkanToast(jenis);
-  if (!supabase) return;
-  const { error } = await supabase
+  if (!supabaseClient) return;
+  const { error } = await supabaseClient
     .from('log_pelanggaran')
     .insert({ peserta_id: examState.pesertaId, jenis });
   if (error) console.error('[pelanggaran] gagal catat ke server:', error);
@@ -459,8 +459,8 @@ async function submitUjian(otomatis = false) {
   document.getElementById('confirmModal').classList.add('hidden');
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 
-  if (supabase) {
-    const { error } = await supabase
+  if (supabaseClient) {
+    const { error } = await supabaseClient
       .from('peserta')
       .update({ status: 'selesai', waktu_submit: new Date().toISOString() })
       .eq('id', examState.pesertaId);
@@ -515,8 +515,8 @@ async function mulaiUjian() {
   } else {
     let pesertaId = crypto.randomUUID();
 
-    if (supabase) {
-      const { data, error } = await supabase
+    if (supabaseClient) {
+      const { data, error } = await supabaseClient
         .from('peserta')
         .insert({
           id: pesertaId,

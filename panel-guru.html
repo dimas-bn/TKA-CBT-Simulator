@@ -111,15 +111,15 @@
    KONFIGURASI SUPABASE — ganti dengan credential project kamu
    (Project Settings → API di dashboard Supabase)
    ========================================================= */
-const SUPABASE_URL = 'GANTI_DENGAN_PROJECT_URL';
-const SUPABASE_ANON_KEY = 'GANTI_DENGAN_ANON_KEY';
+const SUPABASE_URL = 'https://idbqhtjsvowncprmvgcu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkYnFodGpzdm93bmNwcm12Z2N1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NzI2NTQsImV4cCI6MjEwMzA0ODY1NH0.BpUxwo_oJO4TIl7Nleghtp7rIRIx8O7ojsxxvvX-BqA';
 const SESI_ID = '11111111-1111-1111-1111-111111111111'; // id dari tabel sesi_ujian
 
-const supabase = (SUPABASE_URL.startsWith('http'))
+const supabaseClient = (SUPABASE_URL.startsWith('http'))
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
-if (!supabase) {
+if (!supabaseClient) {
   console.warn('[Supabase] Belum dikonfigurasi — isi SUPABASE_URL & SUPABASE_ANON_KEY di atas. Panel memakai data contoh.');
 }
 
@@ -139,9 +139,9 @@ const panelState = {
    dikonfigurasi, biar tetap bisa dites)
    ========================================================= */
 async function loadPesertaFromSupabase() {
-  if (!supabase) return loadPesertaMock();
+  if (!supabaseClient) return loadPesertaMock();
 
-  const { data: pesertaRows, error } = await supabase
+  const { data: pesertaRows, error } = await supabaseClient
     .from('peserta')
     .select('*')
     .eq('sesi_id', SESI_ID)
@@ -264,12 +264,12 @@ function jadwalkanRefetch() {
 }
 
 function subscribeRealtime() {
-  if (!supabase) {
+  if (!supabaseClient) {
     console.log('[realtime] Supabase belum dikonfigurasi — memakai data contoh statis.');
     return;
   }
 
-  supabase
+  supabaseClient
     .channel('panel-guru')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'peserta', filter: `sesi_id=eq.${SESI_ID}` }, jadwalkanRefetch)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jawaban' }, jadwalkanRefetch)
