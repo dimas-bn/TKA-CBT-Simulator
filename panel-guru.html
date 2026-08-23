@@ -40,11 +40,16 @@
   <div class="max-w-6xl mx-auto px-5 py-4 flex flex-wrap items-center justify-between gap-3">
     <div>
       <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-1">Panel Guru</p>
-      <h1 class="font-display text-xl font-semibold" id="hdrSesiNama">Matematika — Tryout Sesi 1</h1>
-      <p class="text-sm text-[var(--ink-soft)]" id="hdrSesiInfo">XII IPA 1 · 90 menit</p>
+      <h1 class="font-display text-xl font-semibold" id="hdrSesiNama">Memuat sesi…</h1>
+      <p class="text-sm text-[var(--ink-soft)]" id="hdrSesiInfo">—</p>
     </div>
-    <div class="flex items-center gap-2 text-sm text-[var(--ink-soft)]">
-      <span class="live-pulse"></span> Live · update otomatis
+    <div class="flex items-center gap-3">
+      <select id="sesiSelect"
+        class="focus-visible-ring text-sm border border-[var(--line)] rounded-lg px-3 py-2 bg-white outline-none focus:border-[var(--accent)]">
+      </select>
+      <div class="flex items-center gap-2 text-sm text-[var(--ink-soft)] shrink-0">
+        <span class="live-pulse"></span> Live
+      </div>
     </div>
   </div>
 </header>
@@ -119,8 +124,6 @@
    ========================================================= */
 const SUPABASE_URL = 'https://idbqhtjsvowncprmvgcu.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkYnFodGpzdm93bmNwcm12Z2N1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NzI2NTQsImV4cCI6MjEwMzA0ODY1NH0.BpUxwo_oJO4TIl7Nleghtp7rIRIx8O7ojsxxvvX-BqA';
-const SESI_ID = '11111111-1111-1111-1111-111111111111'; // id dari tabel sesi_ujian
-
 const supabaseClient = (SUPABASE_URL.startsWith('http'))
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
@@ -133,24 +136,49 @@ if (!supabaseClient) {
    STATE
    ========================================================= */
 const panelState = {
-  sesiNama: 'Matematika — Tryout Sesi 1',
-  sesiInfo: 'XII IPA 1 · 90 menit',
+  sesiId: null,
+  sesiNama: 'Memuat sesi…',
+  sesiInfo: '—',
+  daftarSesi: [],
   peserta: [],
   filterAktif: 'semua',
   kataKunci: ''
 };
 
 /* =========================================================
+   DAFTAR SESI — untuk dropdown pilihan di header
+   ========================================================= */
+async function loadDaftarSesi() {
+  if (!supabaseClient) return loadDaftarSesiMock();
+
+  const { data, error } = await supabaseClient
+    .from('sesi_ujian')
+    .select('id, nama_sesi, mapel, kelas, durasi_menit')
+    .order('created_at', { ascending: true });
+
+  if (error || !data || data.length === 0) {
+    console.error('[panel] gagal ambil daftar sesi, pakai mock:', error);
+    return loadDaftarSesiMock();
+  }
+  return data;
+}
+
+function loadDaftarSesiMock() {
+  return [{ id: 'demo-matematika-01', nama_sesi: 'Matematika — Tryout Sesi 1', kelas: 'XII IPA 1', durasi_menit: 90 }];
+}
+
+/* =========================================================
    DATA — fetch dari Supabase (fallback ke mock kalau belum
    dikonfigurasi, biar tetap bisa dites)
    ========================================================= */
 async function loadPesertaFromSupabase() {
+  if (!panelState.sesiId) return [];
   if (!supabaseClient) return loadPesertaMock();
 
   const { data: pesertaRows, error } = await supabaseClient
     .from('peserta')
     .select('*')
-    .eq('sesi_id', SESI_ID)
+    .eq('sesi_id', panelState.sesiId)
     .order('created_at', { ascending: true });
 
   if (error) { console.error('[panel] gagal ambil peserta:', error); return loadPesertaMock(); }
@@ -161,7 +189,7 @@ async function loadPesertaFromSupabase() {
   const [{ data: jawabanRows }, { data: logRows }, { data: soalRows }] = await Promise.all([
     supabaseClient.from('jawaban').select('peserta_id').in('peserta_id', pesertaIds),
     supabaseClient.from('log_pelanggaran').select('peserta_id').in('peserta_id', pesertaIds),
-    supabaseClient.from('bank_soal').select('id').eq('sesi_id', SESI_ID)
+    supabaseClient.from('bank_soal').select('id').eq('sesi_id', panelState.sesiId)
   ]);
 
   const totalSoal = soalRows?.length || 0;
@@ -197,8 +225,18 @@ function loadPesertaMock() {
 function render() {
   document.getElementById('hdrSesiNama').textContent = panelState.sesiNama;
   document.getElementById('hdrSesiInfo').textContent = panelState.sesiInfo;
+  renderSesiSelect();
   renderStats();
   renderTabel();
+}
+
+function renderSesiSelect() {
+  const select = document.getElementById('sesiSelect');
+  if (select.dataset.populated === 'true') return; // isi sekali saja, biar nggak reset pilihan pas realtime refetch
+  select.innerHTML = panelState.daftarSesi
+    .map(s => `<option value="${s.id}" ${s.id === panelState.sesiId ? 'selected' : ''}>${s.nama_sesi}</option>`)
+    .join('');
+  select.dataset.populated = 'true';
 }
 
 function renderStats() {
@@ -269,15 +307,22 @@ function jadwalkanRefetch() {
   }, 600);
 }
 
+let realtimeChannel = null;
 function subscribeRealtime() {
-  if (!supabaseClient) {
-    console.log('[realtime] Supabase belum dikonfigurasi — memakai data contoh statis.');
+  if (!supabaseClient || !panelState.sesiId) {
+    console.log('[realtime] Supabase belum dikonfigurasi atau sesi belum dipilih — memakai data contoh statis.');
     return;
   }
 
-  supabaseClient
-    .channel('panel-guru')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'peserta', filter: `sesi_id=eq.${SESI_ID}` }, jadwalkanRefetch)
+  // Lepas channel lama dulu kalau ada (misal guru ganti sesi dari dropdown)
+  if (realtimeChannel) {
+    supabaseClient.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+
+  realtimeChannel = supabaseClient
+    .channel(`panel-guru-${panelState.sesiId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'peserta', filter: `sesi_id=eq.${panelState.sesiId}` }, jadwalkanRefetch)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jawaban' }, jadwalkanRefetch)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'log_pelanggaran' }, jadwalkanRefetch)
     .subscribe((status) => {
@@ -326,10 +371,42 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
 
 document.getElementById('btnExport').addEventListener('click', exportRekap);
 
+document.getElementById('sesiSelect').addEventListener('change', async (e) => {
+  await pilihSesi(e.target.value);
+});
+
+async function pilihSesi(sesiId) {
+  const sesi = panelState.daftarSesi.find(s => s.id === sesiId);
+  if (!sesi) return;
+  panelState.sesiId = sesi.id;
+  panelState.sesiNama = sesi.nama_sesi;
+  panelState.sesiInfo = `${sesi.kelas || ''} · ${sesi.durasi_menit} menit`;
+  panelState.peserta = await loadPesertaFromSupabase();
+  render();
+  subscribeRealtime();
+}
+
 /* =========================================================
    INIT
    ========================================================= */
 (async function init() {
+  panelState.daftarSesi = await loadDaftarSesi();
+
+  if (panelState.daftarSesi.length === 0) {
+    panelState.sesiNama = 'Belum ada sesi';
+    panelState.sesiInfo = 'Buat sesi ujian dulu lewat SQL Editor Supabase.';
+    render();
+    return;
+  }
+
+  // Cek deep link ?sesi=<id>, kalau tidak ada pakai sesi pertama
+  const paramSesi = new URLSearchParams(window.location.search).get('sesi');
+  const sesiAwal = panelState.daftarSesi.find(s => s.id === paramSesi) || panelState.daftarSesi[0];
+
+  panelState.sesiId = sesiAwal.id;
+  panelState.sesiNama = sesiAwal.nama_sesi;
+  panelState.sesiInfo = `${sesiAwal.kelas || ''} · ${sesiAwal.durasi_menit} menit`;
+
   panelState.peserta = await loadPesertaFromSupabase();
   render();
   subscribeRealtime();
