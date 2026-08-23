@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TKA CBT Simulator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAFAF7; --ink:#1B2A4A; --ink-soft:#5B6B8C;
+    --accent:#3E5C8A; --accent-soft:#E8EDF5;
+    --done:#2F7D5E; --done-soft:#E8F3EE;
+    --line:#E2E5EC;
+  }
+  html,body{background:var(--paper); font-family:'Inter',sans-serif; color:var(--ink);}
+  .font-display{font-family:'Space Grotesk',sans-serif;}
+  .font-mono{font-family:'JetBrains Mono',monospace;}
+  .role-card{
+    border:1.5px solid var(--line); border-radius:1rem; transition:all .15s ease;
+    background:white;
+  }
+  .role-card:hover{ border-color:var(--accent); transform:translateY(-2px); box-shadow:0 8px 24px -8px rgba(27,42,74,0.12); }
+  .icon-box{
+    width:3rem; height:3rem; border-radius:0.75rem; display:flex; align-items:center; justify-content:center;
+    background:var(--accent-soft); color:var(--accent);
+  }
+  .focus-visible-ring:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
+  .badge-dot{ width:0.4rem; height:0.4rem; border-radius:9999px; background:var(--done); }
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6">
+
+  <div class="max-w-2xl w-full">
+
+    <div class="text-center mb-10">
+      <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-3">Latihan Ujian Berbasis Komputer</p>
+      <h1 class="font-display text-3xl sm:text-4xl font-semibold mb-3">TKA CBT Simulator</h1>
+      <p class="text-[var(--ink-soft)] max-w-md mx-auto">Simulasi ujian TKA — pilih akses sesuai perananmu di bawah ini.</p>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-4 mb-8">
+
+      <a href="ujian.html" class="role-card focus-visible-ring p-6 block">
+        <div class="icon-box mb-4">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 8h14M5 16h14"/><circle cx="12" cy="3" r="1"/></svg>
+        </div>
+        <h2 class="font-display font-semibold text-lg mb-1.5">Saya Siswa</h2>
+        <p class="text-sm text-[var(--ink-soft)] leading-relaxed mb-4">Mulai sesi tryout — isi nama, kerjakan soal, jawaban tersimpan otomatis.</p>
+        <span class="text-sm font-medium text-[var(--accent)] inline-flex items-center gap-1">
+          Masuk ke ujian
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </span>
+      </a>
+
+      <a href="panel-guru.html" class="role-card focus-visible-ring p-6 block">
+        <div class="icon-box mb-4">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>
+        </div>
+        <h2 class="font-display font-semibold text-lg mb-1.5">Saya Guru</h2>
+        <p class="text-sm text-[var(--ink-soft)] leading-relaxed mb-4">Pantau status peserta secara langsung — progres, pelanggaran, dan skor.</p>
+        <span class="text-sm font-medium text-[var(--accent)] inline-flex items-center gap-1">
+          Buka panel pemantauan
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </span>
+      </a>
+
+    </div>
+
+    <div class="flex items-center justify-center gap-2 text-xs text-[var(--ink-soft)] font-mono">
+      <span class="badge-dot"></span> Sesi aktif: Matematika — Tryout Sesi 1
+    </div>
+
+  </div>
+
+</body>
+</html>
