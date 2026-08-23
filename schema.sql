@@ -81,6 +81,18 @@ alter table jawaban enable row level security;
 alter table log_pelanggaran enable row level security;
 alter table bank_soal enable row level security;
 
+-- Drop dulu kalau sudah ada, biar script ini aman dijalankan berkali-kali
+drop policy if exists "sesi_ujian_read_all" on sesi_ujian;
+drop policy if exists "bank_soal_read_all" on bank_soal;
+drop policy if exists "peserta_read_all" on peserta;
+drop policy if exists "peserta_insert_all" on peserta;
+drop policy if exists "peserta_update_all" on peserta;
+drop policy if exists "jawaban_read_all" on jawaban;
+drop policy if exists "jawaban_upsert_all" on jawaban;
+drop policy if exists "jawaban_update_all" on jawaban;
+drop policy if exists "log_insert_all" on log_pelanggaran;
+drop policy if exists "log_read_all" on log_pelanggaran;
+
 -- Semua orang (siswa & guru pakai anon key) boleh baca sesi & bank soal
 create policy "sesi_ujian_read_all" on sesi_ujian for select using (true);
 create policy "bank_soal_read_all" on bank_soal for select using (true);
