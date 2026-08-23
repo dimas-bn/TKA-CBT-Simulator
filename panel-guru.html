@@ -153,9 +153,9 @@ async function loadPesertaFromSupabase() {
   const pesertaIds = pesertaRows.map(p => p.id);
 
   const [{ data: jawabanRows }, { data: logRows }, { data: soalRows }] = await Promise.all([
-    supabase.from('jawaban').select('peserta_id').in('peserta_id', pesertaIds),
-    supabase.from('log_pelanggaran').select('peserta_id').in('peserta_id', pesertaIds),
-    supabase.from('bank_soal').select('id').eq('sesi_id', SESI_ID)
+    supabaseClient.from('jawaban').select('peserta_id').in('peserta_id', pesertaIds),
+    supabaseClient.from('log_pelanggaran').select('peserta_id').in('peserta_id', pesertaIds),
+    supabaseClient.from('bank_soal').select('id').eq('sesi_id', SESI_ID)
   ]);
 
   const totalSoal = soalRows?.length || 0;
