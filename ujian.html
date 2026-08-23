@@ -67,8 +67,8 @@
   <div id="gateScreen" class="min-h-screen flex items-center justify-center p-6">
     <div class="max-w-md w-full">
       <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-2">TKA CBT Simulator</p>
-      <h1 class="font-display text-2xl font-semibold mb-1">Matematika — Tryout Sesi 1</h1>
-      <p class="text-sm text-[var(--ink-soft)] mb-8">XII IPA 1 · 40 soal · 90 menit</p>
+      <h1 id="gateJudul" class="font-display text-2xl font-semibold mb-1">Memuat sesi…</h1>
+      <p id="gateSubjudul" class="text-sm text-[var(--ink-soft)] mb-8">—</p>
 
       <div class="border border-[var(--line)] rounded-xl p-5 mb-6 space-y-3 bg-white">
         <div class="flex gap-3 text-sm">
@@ -85,12 +85,19 @@
         </div>
       </div>
 
+      <div id="gateMapelWrap" class="hidden mb-6">
+        <label class="block mb-2 text-sm font-medium" for="mapelSelect">Pilih mata pelajaran</label>
+        <select id="mapelSelect"
+          class="focus-visible-ring w-full border border-[var(--line)] rounded-lg px-4 py-3 bg-white outline-none focus:border-[var(--accent)]">
+        </select>
+      </div>
+
       <label class="block mb-2 text-sm font-medium" for="namaInput">Nama lengkap</label>
       <input id="namaInput" type="text" placeholder="Sesuai daftar hadir"
         class="focus-visible-ring w-full border border-[var(--line)] rounded-lg px-4 py-3 mb-6 bg-white outline-none focus:border-[var(--accent)]">
 
-      <button id="btnMulai"
-        class="focus-visible-ring w-full bg-[var(--ink)] text-white font-medium py-3.5 rounded-lg hover:bg-[var(--accent)] transition-colors">
+      <button id="btnMulai" disabled
+        class="focus-visible-ring w-full bg-[var(--ink)] text-white font-medium py-3.5 rounded-lg hover:bg-[var(--accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
         Masuk mode layar penuh &amp; mulai
       </button>
       <p id="gateError" class="text-sm text-[var(--danger)] mt-3 hidden"></p>
@@ -104,7 +111,7 @@
     <header class="border-b border-[var(--line)] bg-white sticky top-0 z-20">
       <div class="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
         <div class="min-w-0">
-          <p class="font-display font-semibold text-sm truncate" id="hdrMapel">Matematika — Tryout Sesi 1</p>
+          <p class="font-display font-semibold text-sm truncate" id="hdrMapel">TKA CBT Simulator</p>
           <p class="text-xs text-[var(--ink-soft)] truncate" id="hdrNama">—</p>
         </div>
         <div class="flex items-center gap-4 shrink-0">
@@ -186,8 +193,6 @@
    ========================================================= */
 const SUPABASE_URL = 'https://idbqhtjsvowncprmvgcu.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkYnFodGpzdm93bmNwcm12Z2N1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NzI2NTQsImV4cCI6MjEwMzA0ODY1NH0.BpUxwo_oJO4TIl7Nleghtp7rIRIx8O7ojsxxvvX-BqA';
-const SESI_ID = '11111111-1111-1111-1111-111111111111'; // id dari tabel sesi_ujian
-
 const supabaseClient = (SUPABASE_URL.startsWith('http'))
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
@@ -200,12 +205,14 @@ if (!supabaseClient) {
    STATE TERPUSAT — satu sumber kebenaran, render() dipanggil
    tiap kali state berubah lewat updateState().
    ========================================================= */
-const STORAGE_KEY = 'tka_sim_peserta_v1';
+const STORAGE_KEY_PREFIX = 'tka_sim_peserta_v2';
 
 const examState = {
   pesertaId: null,
   namaSiswa: '',
-  sesiId: 'demo-matematika-01',
+  sesiId: null,
+  sesiNama: '',
+  sesiKelas: '',
   durasiMenit: 90,
   soalList: [],          // diisi loadSoal()
   currentIndex: 0,
@@ -217,6 +224,10 @@ const examState = {
   pelanggaran: []          // log lokal, nanti disinkron ke Supabase
 };
 
+function storageKey(sesiId) {
+  return `${STORAGE_KEY_PREFIX}_${sesiId}`;
+}
+
 function updateState(changes) {
   Object.assign(examState, changes);
   persistLocal();
@@ -224,6 +235,7 @@ function updateState(changes) {
 }
 
 function persistLocal() {
+  if (!examState.sesiId) return;
   const snapshot = {
     pesertaId: examState.pesertaId,
     namaSiswa: examState.namaSiswa,
@@ -233,26 +245,55 @@ function persistLocal() {
     timeRemainingSec: examState.timeRemainingSec,
     isSubmitted: examState.isSubmitted
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  localStorage.setItem(storageKey(examState.sesiId), JSON.stringify(snapshot));
 }
 
-function restoreLocal() {
-  const raw = localStorage.getItem(STORAGE_KEY);
+function restoreLocal(sesiId) {
+  const raw = localStorage.getItem(storageKey(sesiId));
   if (!raw) return null;
   try { return JSON.parse(raw); } catch { return null; }
+}
+
+/* =========================================================
+   DAFTAR SESI AKTIF — untuk dropdown pilihan mapel di gate
+   ========================================================= */
+async function loadDaftarSesi() {
+  if (!supabaseClient) return loadDaftarSesiMock();
+
+  const { data, error } = await supabaseClient
+    .from('sesi_ujian')
+    .select('id, nama_sesi, mapel, kelas, durasi_menit')
+    .eq('status', 'aktif')
+    .order('created_at', { ascending: true });
+
+  if (error || !data || data.length === 0) {
+    console.error('[loadDaftarSesi] gagal ambil dari Supabase, pakai mock:', error);
+    return loadDaftarSesiMock();
+  }
+  return data;
+}
+
+function loadDaftarSesiMock() {
+  return [{
+    id: 'demo-matematika-01',
+    nama_sesi: 'Matematika — Tryout Sesi 1',
+    mapel: 'Matematika',
+    kelas: 'XII IPA 1',
+    durasi_menit: 90
+  }];
 }
 
 /* =========================================================
    DATA SOAL — fetch dari Supabase bank_soal (fallback ke mock
    kalau Supabase belum dikonfigurasi, biar tetap bisa dites)
    ========================================================= */
-async function loadSoal() {
+async function loadSoal(sesiId) {
   if (!supabaseClient) return loadSoalMock();
 
   const { data, error } = await supabaseClient
     .from('bank_soal')
     .select('id, teks, opsi')
-    .eq('sesi_id', SESI_ID)
+    .eq('sesi_id', sesiId)
     .order('urutan', { ascending: true });
 
   if (error || !data || data.length === 0) {
@@ -295,6 +336,7 @@ function render() {
 
 function renderHeader() {
   document.getElementById('hdrNama').textContent = examState.namaSiswa || '—';
+  document.getElementById('hdrMapel').textContent = examState.sesiNama || 'TKA CBT Simulator';
 }
 
 function renderTimer() {
@@ -478,13 +520,69 @@ async function submitUjian(otomatis = false) {
 }
 
 /* =========================================================
-   GATE / MULAI UJIAN
+   GATE / PILIH MAPEL / MULAI UJIAN
    ========================================================= */
+let daftarSesiTersedia = [];
+
+async function initGate() {
+  daftarSesiTersedia = await loadDaftarSesi();
+  const judul = document.getElementById('gateJudul');
+  const subjudul = document.getElementById('gateSubjudul');
+  const btnMulai = document.getElementById('btnMulai');
+
+  if (daftarSesiTersedia.length === 0) {
+    judul.textContent = 'Belum ada sesi aktif';
+    subjudul.textContent = 'Hubungi guru untuk membuka sesi ujian.';
+    return;
+  }
+
+  // Cek deep link ?sesi=<id> dari halaman depan / panel guru
+  const paramSesi = new URLSearchParams(window.location.search).get('sesi');
+  const wrap = document.getElementById('gateMapelWrap');
+  const select = document.getElementById('mapelSelect');
+
+  if (paramSesi && daftarSesiTersedia.some(s => s.id === paramSesi)) {
+    // Sesi sudah ditentukan lewat link, sembunyikan dropdown
+    setSesiTerpilih(paramSesi);
+  } else if (daftarSesiTersedia.length === 1) {
+    // Cuma 1 sesi aktif, langsung pakai itu tanpa perlu dropdown
+    setSesiTerpilih(daftarSesiTersedia[0].id);
+  } else {
+    // Lebih dari 1 sesi aktif, tampilkan dropdown pilihan
+    wrap.classList.remove('hidden');
+    select.innerHTML = daftarSesiTersedia
+      .map(s => `<option value="${s.id}">${s.nama_sesi}</option>`)
+      .join('');
+    select.addEventListener('change', () => setSesiTerpilih(select.value));
+    setSesiTerpilih(daftarSesiTersedia[0].id);
+  }
+
+  btnMulai.disabled = false;
+}
+
+function setSesiTerpilih(sesiId) {
+  const sesi = daftarSesiTersedia.find(s => s.id === sesiId);
+  if (!sesi) return;
+  updateState({
+    sesiId: sesi.id,
+    sesiNama: sesi.nama_sesi,
+    sesiKelas: sesi.kelas || '',
+    durasiMenit: sesi.durasi_menit
+  });
+  document.getElementById('gateJudul').textContent = sesi.nama_sesi;
+  document.getElementById('gateSubjudul').textContent = `${sesi.kelas || ''} · ${sesi.durasi_menit} menit`;
+}
+
 async function mulaiUjian() {
   const nama = document.getElementById('namaInput').value.trim();
   const errEl = document.getElementById('gateError');
   if (!nama) {
     errEl.textContent = 'Nama wajib diisi sebelum memulai.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (!examState.sesiId) {
+    errEl.textContent = 'Sesi ujian belum tersedia. Coba muat ulang halaman.';
     errEl.classList.remove('hidden');
     return;
   }
@@ -497,8 +595,9 @@ async function mulaiUjian() {
     // fullscreen ditolak/tidak didukung — tetap lanjut, ini bukan blocker keras
   });
 
-  const restored = restoreLocal();
-  const soalList = await loadSoal();
+  const sesiId = examState.sesiId;
+  const restored = restoreLocal(sesiId);
+  const soalList = await loadSoal(sesiId);
   const durasiDetik = examState.durasiMenit * 60;
 
   if (restored && restored.namaSiswa === nama && !restored.isSubmitted) {
@@ -520,7 +619,7 @@ async function mulaiUjian() {
         .from('peserta')
         .insert({
           id: pesertaId,
-          sesi_id: SESI_ID,
+          sesi_id: sesiId,
           nama_siswa: nama,
           status: 'sedang_ujian',
           waktu_mulai: new Date().toISOString()
@@ -558,6 +657,7 @@ async function mulaiUjian() {
 /* =========================================================
    EVENT BINDINGS
    ========================================================= */
+initGate();
 document.getElementById('btnMulai').addEventListener('click', mulaiUjian);
 document.getElementById('btnPrev').addEventListener('click', () => updateState({ currentIndex: Math.max(0, examState.currentIndex - 1) }));
 document.getElementById('btnNext').addEventListener('click', () => updateState({ currentIndex: Math.min(examState.soalList.length - 1, examState.currentIndex + 1) }));

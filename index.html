@@ -7,6 +7,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --paper:#FAFAF7; --ink:#1B2A4A; --ink-soft:#5B6B8C;
@@ -68,11 +69,45 @@
 
     </div>
 
-    <div class="flex items-center justify-center gap-2 text-xs text-[var(--ink-soft)] font-mono">
-      <span class="badge-dot"></span> Sesi aktif: Matematika — Tryout Sesi 1
+    <div id="sesiAktifWrap" class="text-center">
+      <p id="sesiAktifText" class="flex items-center justify-center gap-2 text-xs text-[var(--ink-soft)] font-mono">
+        <span class="badge-dot"></span> Memuat sesi aktif…
+      </p>
     </div>
 
   </div>
 
+<script>
+const SUPABASE_URL = 'https://idbqhtjsvowncprmvgcu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkYnFodGpzdm93bmNwcm12Z2N1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NzI2NTQsImV4cCI6MjEwMzA0ODY1NH0.BpUxwo_oJO4TIl7Nleghtp7rIRIx8O7ojsxxvvX-BqA';
+
+const supabaseClient = (SUPABASE_URL.startsWith('http'))
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+async function tampilkanSesiAktif() {
+  const el = document.getElementById('sesiAktifText');
+  if (!supabaseClient) {
+    el.innerHTML = `<span class="badge-dot"></span> Matematika — Tryout Sesi 1`;
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from('sesi_ujian')
+    .select('nama_sesi')
+    .eq('status', 'aktif')
+    .order('created_at', { ascending: true });
+
+  if (error || !data || data.length === 0) {
+    document.getElementById('sesiAktifWrap').classList.add('hidden');
+    return;
+  }
+
+  const daftar = data.map(s => s.nama_sesi.split('—')[0].trim()).join(' · ');
+  el.innerHTML = `<span class="badge-dot"></span> ${data.length} sesi aktif: ${daftar}`;
+}
+
+tampilkanSesiAktif();
+</script>
 </body>
 </html>
