@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>TKA CBT Simulator — Sesi Ujian</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --paper:#FAFAF7;
+    --ink:#1B2A4A;
+    --ink-soft:#5B6B8C;
+    --accent:#3E5C8A;
+    --accent-soft:#E8EDF5;
+    --flag:#C97A2B;
+    --flag-soft:#FBF0E3;
+    --done:#2F7D5E;
+    --done-soft:#E8F3EE;
+    --danger:#B4463C;
+    --danger-soft:#FBEAE8;
+    --line:#E2E5EC;
+  }
+  html,body{background:var(--paper); font-family:'Inter',sans-serif; color:var(--ink);}
+  .font-display{font-family:'Space Grotesk',sans-serif;}
+  .font-mono{font-family:'JetBrains Mono',monospace;}
+  ::selection{background:var(--accent-soft);}
+  body.exam-locked{ -webkit-user-select:none; user-select:none; }
+  .soal-dot{
+    width:2.5rem; height:2.5rem; border-radius:0.5rem;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono',monospace; font-size:0.8rem; font-weight:700;
+    border:1.5px solid var(--line); color:var(--ink-soft);
+    transition:all .15s ease; cursor:pointer;
+  }
+  .soal-dot:hover{ border-color:var(--accent); }
+  .soal-dot.current{ outline:2px solid var(--ink); outline-offset:2px; }
+  .soal-dot.status-terjawab{ background:var(--done-soft); border-color:var(--done); color:var(--done); }
+  .soal-dot.status-ragu{ background:var(--flag-soft); border-color:var(--flag); color:var(--flag); }
+  .soal-dot.status-kosong{ background:transparent; }
+  .opsi-btn{
+    border:1.5px solid var(--line); border-radius:0.75rem; transition:all .12s ease;
+  }
+  .opsi-btn:hover{ border-color:var(--accent); background:var(--accent-soft); }
+  .opsi-btn.selected{ border-color:var(--accent); background:var(--accent-soft); box-shadow:inset 0 0 0 1.5px var(--accent); }
+  .opsi-letter{
+    width:2rem; height:2rem; border-radius:9999px; border:1.5px solid var(--line);
+    display:flex; align-items:center; justify-content:center; font-weight:600; font-size:0.85rem;
+    flex-shrink:0;
+  }
+  .opsi-btn.selected .opsi-letter{ background:var(--accent); border-color:var(--accent); color:white; }
+  #timer.warning{ color:var(--flag); }
+  #timer.critical{ color:var(--danger); animation:pulse-danger 1.5s ease-in-out infinite; }
+  @keyframes pulse-danger{ 0%,100%{opacity:1;} 50%{opacity:.55;} }
+  @media (prefers-reduced-motion: reduce){
+    #timer.critical{ animation:none; }
+  }
+  .focus-visible-ring:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
+  #violationToast{ transition: transform .25s ease, opacity .25s ease; }
+</style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ============ PRE-EXAM GATE ============ -->
+  <div id="gateScreen" class="min-h-screen flex items-center justify-center p-6">
+    <div class="max-w-md w-full">
+      <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-2">TKA CBT Simulator</p>
+      <h1 class="font-display text-2xl font-semibold mb-1">Matematika — Tryout Sesi 1</h1>
+      <p class="text-sm text-[var(--ink-soft)] mb-8">XII IPA 1 · 40 soal · 90 menit</p>
+
+      <div class="border border-[var(--line)] rounded-xl p-5 mb-6 space-y-3 bg-white">
+        <div class="flex gap-3 text-sm">
+          <span class="font-mono text-[var(--ink-soft)] w-6">01</span>
+          <span>Layar akan masuk mode layar penuh. Jangan keluar sampai selesai.</span>
+        </div>
+        <div class="flex gap-3 text-sm">
+          <span class="font-mono text-[var(--ink-soft)] w-6">02</span>
+          <span>Berpindah tab atau keluar layar penuh akan tercatat sebagai pelanggaran.</span>
+        </div>
+        <div class="flex gap-3 text-sm">
+          <span class="font-mono text-[var(--ink-soft)] w-6">03</span>
+          <span>Jawaban tersimpan otomatis. Ujian berakhir saat waktu habis atau kamu klik Selesai.</span>
+        </div>
+      </div>
+
+      <label class="block mb-2 text-sm font-medium" for="namaInput">Nama lengkap</label>
+      <input id="namaInput" type="text" placeholder="Sesuai daftar hadir"
+        class="focus-visible-ring w-full border border-[var(--line)] rounded-lg px-4 py-3 mb-6 bg-white outline-none focus:border-[var(--accent)]">
+
+      <button id="btnMulai"
+        class="focus-visible-ring w-full bg-[var(--ink)] text-white font-medium py-3.5 rounded-lg hover:bg-[var(--accent)] transition-colors">
+        Masuk mode layar penuh &amp; mulai
+      </button>
+      <p id="gateError" class="text-sm text-[var(--danger)] mt-3 hidden"></p>
+    </div>
+  </div>
+
+  <!-- ============ EXAM SCREEN ============ -->
+  <div id="examScreen" class="hidden min-h-screen flex flex-col">
+
+    <!-- Top bar -->
+    <header class="border-b border-[var(--line)] bg-white sticky top-0 z-20">
+      <div class="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <p class="font-display font-semibold text-sm truncate" id="hdrMapel">Matematika — Tryout Sesi 1</p>
+          <p class="text-xs text-[var(--ink-soft)] truncate" id="hdrNama">—</p>
+        </div>
+        <div class="flex items-center gap-4 shrink-0">
+          <div class="text-right">
+            <p class="text-[10px] uppercase tracking-wider text-[var(--ink-soft)] font-mono">Sisa waktu</p>
+            <p id="timer" class="font-mono text-xl font-bold tabular-nums">90:00</p>
+          </div>
+          <button id="btnSelesai"
+            class="focus-visible-ring bg-[var(--ink)] text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-[var(--danger)] transition-colors">
+            Selesai
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="max-w-6xl mx-auto w-full px-5 py-6 flex-1 grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-6">
+
+      <!-- Soal area -->
+      <main>
+        <div class="flex items-center justify-between mb-4">
+          <p class="font-mono text-xs text-[var(--ink-soft)]">Soal <span id="soalIndex">1</span> dari <span id="soalTotal">40</span></p>
+          <button id="btnRagu" class="focus-visible-ring text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--line)] hover:border-[var(--flag)] hover:text-[var(--flag)] transition-colors">
+            🚩 Tandai ragu-ragu
+          </button>
+        </div>
+
+        <div class="bg-white border border-[var(--line)] rounded-xl p-6 mb-4">
+          <p id="soalTeks" class="text-base leading-relaxed mb-6">Memuat soal…</p>
+          <div id="opsiList" class="space-y-2.5"></div>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <button id="btnPrev" class="focus-visible-ring text-sm font-medium px-4 py-2.5 rounded-lg border border-[var(--line)] hover:border-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            ← Sebelumnya
+          </button>
+          <button id="btnNext" class="focus-visible-ring text-sm font-medium px-4 py-2.5 rounded-lg border border-[var(--line)] hover:border-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            Selanjutnya →
+          </button>
+        </div>
+      </main>
+
+      <!-- Navigasi soal -->
+      <aside>
+        <div class="bg-white border border-[var(--line)] rounded-xl p-4 lg:sticky lg:top-20">
+          <p class="text-xs font-medium text-[var(--ink-soft)] mb-3 uppercase tracking-wide font-mono">Navigasi soal</p>
+          <div id="soalGrid" class="grid grid-cols-6 lg:grid-cols-5 gap-2 mb-4"></div>
+          <div class="space-y-1.5 text-xs text-[var(--ink-soft)] border-t border-[var(--line)] pt-3">
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm inline-block" style="background:var(--done-soft);border:1.5px solid var(--done)"></span> Terjawab</div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm inline-block" style="background:var(--flag-soft);border:1.5px solid var(--flag)"></span> Ragu-ragu</div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm inline-block border border-[var(--line)]"></span> Belum dijawab</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Violation toast -->
+  <div id="violationToast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 bg-[var(--danger)] text-white text-sm font-medium px-5 py-3 rounded-lg shadow-lg z-50">
+    ⚠ Pelanggaran tercatat: <span id="violationMsg"></span>
+  </div>
+
+  <!-- Submit confirmation -->
+  <div id="confirmModal" class="hidden fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-6">
+    <div class="bg-white rounded-xl max-w-sm w-full p-6">
+      <h3 class="font-display font-semibold text-lg mb-2">Selesaikan ujian?</h3>
+      <p class="text-sm text-[var(--ink-soft)] mb-1" id="confirmSummary">—</p>
+      <p class="text-sm text-[var(--ink-soft)] mb-6">Jawaban tidak bisa diubah lagi setelah ini.</p>
+      <div class="flex gap-3">
+        <button id="btnCancelSubmit" class="focus-visible-ring flex-1 text-sm font-medium py-2.5 rounded-lg border border-[var(--line)]">Kembali</button>
+        <button id="btnConfirmSubmit" class="focus-visible-ring flex-1 text-sm font-medium py-2.5 rounded-lg bg-[var(--danger)] text-white">Ya, selesaikan</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* =========================================================
+   KONFIGURASI SUPABASE — ganti dengan credential project kamu
+   (Project Settings → API di dashboard Supabase)
+   ========================================================= */
+const SUPABASE_URL = 'GANTI_DENGAN_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'GANTI_DENGAN_ANON_KEY';
+const SESI_ID = '11111111-1111-1111-1111-111111111111'; // id dari tabel sesi_ujian
+
+const supabase = (SUPABASE_URL.startsWith('http'))
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+if (!supabase) {
+  console.warn('[Supabase] Belum dikonfigurasi — isi SUPABASE_URL & SUPABASE_ANON_KEY di atas.');
+}
+
+/* =========================================================
+   STATE TERPUSAT — satu sumber kebenaran, render() dipanggil
+   tiap kali state berubah lewat updateState().
+   ========================================================= */
+const STORAGE_KEY = 'tka_sim_peserta_v1';
+
+const examState = {
+  pesertaId: null,
+  namaSiswa: '',
+  sesiId: 'demo-matematika-01',
+  durasiMenit: 90,
+  soalList: [],          // diisi loadSoal()
+  currentIndex: 0,
+  jawaban: {},            // { soalId: 'a' }
+  statusRagu: {},         // { soalId: true }
+  timeRemainingSec: 0,
+  timerHandle: null,
+  isSubmitted: false,
+  pelanggaran: []          // log lokal, nanti disinkron ke Supabase
+};
+
+function updateState(changes) {
+  Object.assign(examState, changes);
+  persistLocal();
+  render();
+}
+
+function persistLocal() {
+  const snapshot = {
+    pesertaId: examState.pesertaId,
+    namaSiswa: examState.namaSiswa,
+    currentIndex: examState.currentIndex,
+    jawaban: examState.jawaban,
+    statusRagu: examState.statusRagu,
+    timeRemainingSec: examState.timeRemainingSec,
+    isSubmitted: examState.isSubmitted
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+}
+
+function restoreLocal() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+/* =========================================================
+   DATA SOAL — fetch dari Supabase bank_soal (fallback ke mock
+   kalau Supabase belum dikonfigurasi, biar tetap bisa dites)
+   ========================================================= */
+async function loadSoal() {
+  if (!supabase) return loadSoalMock();
+
+  const { data, error } = await supabase
+    .from('bank_soal')
+    .select('id, teks, opsi')
+    .eq('sesi_id', SESI_ID)
+    .order('urutan', { ascending: true });
+
+  if (error || !data || data.length === 0) {
+    console.error('[loadSoal] gagal ambil dari Supabase, pakai mock:', error);
+    return loadSoalMock();
+  }
+  return data;
+}
+
+function loadSoalMock() {
+  return [
+    {
+      id: 'mat-001',
+      teks: 'Sebuah kolam renang berbentuk balok dengan panjang 12 m, lebar 6 m, dan kedalaman 2 m. Volume air yang dibutuhkan untuk mengisi penuh kolam tersebut adalah…',
+      opsi: { a: '120 m³', b: '144 m³', c: '132 m³', d: '156 m³', e: '168 m³' }
+    },
+    {
+      id: 'mat-002',
+      teks: 'Jika 3x − 7 = 2x + 5, maka nilai x adalah…',
+      opsi: { a: '10', b: '11', c: '12', d: '13', e: '14' }
+    },
+    {
+      id: 'mat-003',
+      teks: 'Median dari data: 7, 9, 5, 8, 10, 6, 9 adalah…',
+      opsi: { a: '7', b: '8', c: '9', d: '10', e: '6' }
+    }
+  ];
+}
+
+/* =========================================================
+   RENDER
+   ========================================================= */
+function render() {
+  renderHeader();
+  renderTimer();
+  renderSoal();
+  renderSoalGrid();
+  renderNavButtons();
+}
+
+function renderHeader() {
+  document.getElementById('hdrNama').textContent = examState.namaSiswa || '—';
+}
+
+function renderTimer() {
+  const el = document.getElementById('timer');
+  const m = Math.floor(examState.timeRemainingSec / 60);
+  const s = examState.timeRemainingSec % 60;
+  el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  el.classList.remove('warning','critical');
+  if (examState.timeRemainingSec <= 300) el.classList.add('critical');      // <5 menit
+  else if (examState.timeRemainingSec <= 900) el.classList.add('warning');  // <15 menit
+}
+
+function renderSoal() {
+  const soal = examState.soalList[examState.currentIndex];
+  if (!soal) return;
+  document.getElementById('soalIndex').textContent = examState.currentIndex + 1;
+  document.getElementById('soalTotal').textContent = examState.soalList.length;
+  document.getElementById('soalTeks').textContent = soal.teks;
+
+  const opsiList = document.getElementById('opsiList');
+  opsiList.innerHTML = '';
+  const selected = examState.jawaban[soal.id];
+
+  Object.entries(soal.opsi).forEach(([key, teks]) => {
+    const btn = document.createElement('button');
+    btn.className = `opsi-btn focus-visible-ring w-full text-left px-4 py-3.5 flex items-center gap-3 ${selected === key ? 'selected' : ''}`;
+    btn.innerHTML = `<span class="opsi-letter">${key.toUpperCase()}</span><span class="text-sm">${teks}</span>`;
+    btn.onclick = () => pilihJawaban(soal.id, key);
+    opsiList.appendChild(btn);
+  });
+
+  const btnRagu = document.getElementById('btnRagu');
+  const isRagu = !!examState.statusRagu[soal.id];
+  btnRagu.style.borderColor = isRagu ? 'var(--flag)' : '';
+  btnRagu.style.color = isRagu ? 'var(--flag)' : '';
+  btnRagu.style.background = isRagu ? 'var(--flag-soft)' : '';
+}
+
+function renderSoalGrid() {
+  const grid = document.getElementById('soalGrid');
+  grid.innerHTML = '';
+  examState.soalList.forEach((soal, i) => {
+    const dot = document.createElement('button');
+    let statusClass = 'status-kosong';
+    if (examState.statusRagu[soal.id]) statusClass = 'status-ragu';
+    else if (examState.jawaban[soal.id]) statusClass = 'status-terjawab';
+    dot.className = `soal-dot focus-visible-ring ${statusClass} ${i === examState.currentIndex ? 'current' : ''}`;
+    dot.textContent = i + 1;
+    dot.onclick = () => updateState({ currentIndex: i });
+    grid.appendChild(dot);
+  });
+}
+
+function renderNavButtons() {
+  document.getElementById('btnPrev').disabled = examState.currentIndex === 0;
+  document.getElementById('btnNext').disabled = examState.currentIndex === examState.soalList.length - 1;
+}
+
+/* =========================================================
+   ACTIONS
+   ========================================================= */
+function pilihJawaban(soalId, key) {
+  const jawabanBaru = { ...examState.jawaban, [soalId]: key };
+  updateState({ jawaban: jawabanBaru });
+  simpanJawabanKeServer(soalId, key); // debounced, lihat di bawah
+}
+
+function toggleRagu() {
+  const soal = examState.soalList[examState.currentIndex];
+  const statusBaru = { ...examState.statusRagu, [soal.id]: !examState.statusRagu[soal.id] };
+  updateState({ statusRagu: statusBaru });
+}
+
+/* Auto-save ke Supabase — debounce ringan biar nggak flood request */
+let saveTimeout = null;
+function simpanJawabanKeServer(soalId, jawaban) {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(async () => {
+    if (!supabase) { console.log('[auto-save mock]', soalId, '→', jawaban); return; }
+    const { error } = await supabase
+      .from('jawaban')
+      .upsert(
+        { peserta_id: examState.pesertaId, soal_id: soalId, jawaban_terpilih: jawaban },
+        { onConflict: 'peserta_id,soal_id' }
+      );
+    if (error) console.error('[auto-save] gagal simpan:', error);
+  }, 400);
+}
+
+/* =========================================================
+   TIMER
+   ========================================================= */
+function startTimer() {
+  if (examState.timerHandle) clearInterval(examState.timerHandle);
+  const handle = setInterval(() => {
+    if (examState.timeRemainingSec <= 1) {
+      clearInterval(handle);
+      updateState({ timeRemainingSec: 0 });
+      submitUjian(true); // auto-submit
+      return;
+    }
+    updateState({ timeRemainingSec: examState.timeRemainingSec - 1 });
+  }, 1000);
+  examState.timerHandle = handle;
+}
+
+/* =========================================================
+   DETEKSI PELANGGARAN — fullscreen & tab visibility
+   ========================================================= */
+async function catatPelanggaran(jenis) {
+  const entry = { jenis, waktu: new Date().toISOString() };
+  examState.pelanggaran.push(entry);
+  tampilkanToast(jenis);
+  if (!supabase) return;
+  const { error } = await supabase
+    .from('log_pelanggaran')
+    .insert({ peserta_id: examState.pesertaId, jenis });
+  if (error) console.error('[pelanggaran] gagal catat ke server:', error);
+}
+
+function tampilkanToast(jenis) {
+  const label = { fullscreen_keluar: 'keluar dari layar penuh', tab_switch: 'berpindah tab / aplikasi lain' }[jenis] || jenis;
+  document.getElementById('violationMsg').textContent = label;
+  const toast = document.getElementById('violationToast');
+  toast.classList.remove('hidden');
+  clearTimeout(toast._hideTimeout);
+  toast._hideTimeout = setTimeout(() => toast.classList.add('hidden'), 3500);
+}
+
+document.addEventListener('fullscreenchange', () => {
+  const masihExam = !document.getElementById('examScreen').classList.contains('hidden');
+  if (masihExam && !document.fullscreenElement && !examState.isSubmitted) {
+    catatPelanggaran('fullscreen_keluar');
+  }
+});
+
+document.addEventListener('visibilitychange', () => {
+  const masihExam = !document.getElementById('examScreen').classList.contains('hidden');
+  if (masihExam && document.hidden && !examState.isSubmitted) {
+    catatPelanggaran('tab_switch');
+  }
+});
+
+/* =========================================================
+   SUBMIT
+   ========================================================= */
+function ringkasanJawaban() {
+  const total = examState.soalList.length;
+  const terjawab = examState.soalList.filter(s => examState.jawaban[s.id]).length;
+  return { total, terjawab, kosong: total - terjawab };
+}
+
+function bukaKonfirmasiSubmit() {
+  const { total, terjawab, kosong } = ringkasanJawaban();
+  document.getElementById('confirmSummary').textContent = `${terjawab} dari ${total} soal terjawab${kosong > 0 ? ` · ${kosong} belum dijawab` : ''}.`;
+  document.getElementById('confirmModal').classList.remove('hidden');
+}
+
+async function submitUjian(otomatis = false) {
+  if (examState.timerHandle) clearInterval(examState.timerHandle);
+  updateState({ isSubmitted: true });
+  document.getElementById('confirmModal').classList.add('hidden');
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+
+  if (supabase) {
+    const { error } = await supabase
+      .from('peserta')
+      .update({ status: 'selesai', waktu_submit: new Date().toISOString() })
+      .eq('id', examState.pesertaId);
+    if (error) console.error('[submit] gagal update status peserta:', error);
+  }
+
+  document.body.innerHTML = `
+    <div class="min-h-screen flex items-center justify-center p-6">
+      <div class="max-w-sm text-center">
+        <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-3">${otomatis ? 'Waktu habis' : 'Selesai'}</p>
+        <h1 class="font-display text-xl font-semibold mb-2">Ujian telah dikumpulkan</h1>
+        <p class="text-sm text-[var(--ink-soft)]">Hasil akan tersedia setelah sesi ditutup guru.</p>
+      </div>
+    </div>`;
+}
+
+/* =========================================================
+   GATE / MULAI UJIAN
+   ========================================================= */
+async function mulaiUjian() {
+  const nama = document.getElementById('namaInput').value.trim();
+  const errEl = document.getElementById('gateError');
+  if (!nama) {
+    errEl.textContent = 'Nama wajib diisi sebelum memulai.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const btnMulai = document.getElementById('btnMulai');
+  btnMulai.disabled = true;
+  btnMulai.textContent = 'Menyiapkan ujian…';
+
+  document.documentElement.requestFullscreen?.().catch(() => {
+    // fullscreen ditolak/tidak didukung — tetap lanjut, ini bukan blocker keras
+  });
+
+  const restored = restoreLocal();
+  const soalList = await loadSoal();
+  const durasiDetik = examState.durasiMenit * 60;
+
+  if (restored && restored.namaSiswa === nama && !restored.isSubmitted) {
+    // sesi sebelumnya ditemukan (misal habis refresh) — lanjutkan, jangan insert baris baru
+    updateState({
+      pesertaId: restored.pesertaId,
+      namaSiswa: restored.namaSiswa,
+      soalList,
+      currentIndex: restored.currentIndex,
+      jawaban: restored.jawaban,
+      statusRagu: restored.statusRagu,
+      timeRemainingSec: restored.timeRemainingSec
+    });
+  } else {
+    let pesertaId = crypto.randomUUID();
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('peserta')
+        .insert({
+          id: pesertaId,
+          sesi_id: SESI_ID,
+          nama_siswa: nama,
+          status: 'sedang_ujian',
+          waktu_mulai: new Date().toISOString()
+        })
+        .select()
+        .single();
+      if (error) {
+        console.error('[mulaiUjian] gagal insert peserta:', error);
+        errEl.textContent = 'Gagal terhubung ke server. Cek koneksi lalu coba lagi.';
+        errEl.classList.remove('hidden');
+        btnMulai.disabled = false;
+        btnMulai.textContent = 'Masuk mode layar penuh & mulai';
+        return;
+      }
+      pesertaId = data.id;
+    }
+
+    updateState({
+      pesertaId,
+      namaSiswa: nama,
+      soalList,
+      currentIndex: 0,
+      jawaban: {},
+      statusRagu: {},
+      timeRemainingSec: durasiDetik
+    });
+  }
+
+  document.getElementById('gateScreen').classList.add('hidden');
+  document.getElementById('examScreen').classList.remove('hidden');
+  document.body.classList.add('exam-locked');
+  startTimer();
+}
+
+/* =========================================================
+   EVENT BINDINGS
+   ========================================================= */
+document.getElementById('btnMulai').addEventListener('click', mulaiUjian);
+document.getElementById('btnPrev').addEventListener('click', () => updateState({ currentIndex: Math.max(0, examState.currentIndex - 1) }));
+document.getElementById('btnNext').addEventListener('click', () => updateState({ currentIndex: Math.min(examState.soalList.length - 1, examState.currentIndex + 1) }));
+document.getElementById('btnRagu').addEventListener('click', toggleRagu);
+document.getElementById('btnSelesai').addEventListener('click', bukaKonfirmasiSubmit);
+document.getElementById('btnCancelSubmit').addEventListener('click', () => document.getElementById('confirmModal').classList.add('hidden'));
+document.getElementById('btnConfirmSubmit').addEventListener('click', () => submitUjian(false));
+
+// Cegah klik kanan & beberapa shortcut dasar selama ujian (deterrent, bukan proteksi mutlak)
+document.addEventListener('contextmenu', (e) => {
+  if (!document.getElementById('examScreen').classList.contains('hidden')) e.preventDefault();
+});
+document.addEventListener('keydown', (e) => {
+  const masihExam = !document.getElementById('examScreen').classList.contains('hidden');
+  if (!masihExam) return;
+  const blocked = (e.ctrlKey && ['c','v','u','p'].includes(e.key.toLowerCase())) || e.key === 'F11';
+  if (blocked) e.preventDefault();
+});
+</script>
+</body>
+</html>

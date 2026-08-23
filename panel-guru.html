@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TKA CBT Simulator — Panel Guru</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --paper:#FAFAF7; --ink:#1B2A4A; --ink-soft:#5B6B8C;
+    --accent:#3E5C8A; --accent-soft:#E8EDF5;
+    --flag:#C97A2B; --flag-soft:#FBF0E3;
+    --done:#2F7D5E; --done-soft:#E8F3EE;
+    --danger:#B4463C; --danger-soft:#FBEAE8;
+    --line:#E2E5EC;
+  }
+  html,body{background:var(--paper); font-family:'Inter',sans-serif; color:var(--ink);}
+  .font-display{font-family:'Space Grotesk',sans-serif;}
+  .font-mono{font-family:'JetBrains Mono',monospace;}
+  .status-badge{ display:inline-flex; align-items:center; gap:0.4rem; font-size:0.75rem; font-weight:600; padding:0.3rem 0.65rem; border-radius:9999px; }
+  .status-belum{ background:#F1F2F5; color:var(--ink-soft); }
+  .status-sedang{ background:var(--accent-soft); color:var(--accent); }
+  .status-selesai{ background:var(--done-soft); color:var(--done); }
+  .dot{ width:0.4rem; height:0.4rem; border-radius:9999px; }
+  .dot-sedang{ background:var(--accent); animation:blink 1.6s ease-in-out infinite; }
+  @keyframes blink{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  @media (prefers-reduced-motion: reduce){ .dot-sedang{ animation:none; } }
+  tr.row-flagged{ background:var(--danger-soft); }
+  .live-pulse{ width:0.5rem; height:0.5rem; border-radius:9999px; background:var(--done); animation:blink 1.6s ease-in-out infinite; }
+  th{ font-family:'JetBrains Mono',monospace; font-weight:600; font-size:0.7rem; letter-spacing:0.03em; text-transform:uppercase; color:var(--ink-soft); }
+  .focus-visible-ring:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<header class="border-b border-[var(--line)] bg-white sticky top-0 z-10">
+  <div class="max-w-6xl mx-auto px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-1">Panel Guru</p>
+      <h1 class="font-display text-xl font-semibold" id="hdrSesiNama">Matematika — Tryout Sesi 1</h1>
+      <p class="text-sm text-[var(--ink-soft)]" id="hdrSesiInfo">XII IPA 1 · 90 menit</p>
+    </div>
+    <div class="flex items-center gap-2 text-sm text-[var(--ink-soft)]">
+      <span class="live-pulse"></span> Live · update otomatis
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-5 py-6">
+
+  <!-- Ringkasan -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+    <div class="bg-white border border-[var(--line)] rounded-xl p-4">
+      <p class="text-2xl font-display font-semibold" id="statTotal">—</p>
+      <p class="text-xs text-[var(--ink-soft)] mt-1">Total peserta</p>
+    </div>
+    <div class="bg-white border border-[var(--line)] rounded-xl p-4">
+      <p class="text-2xl font-display font-semibold" style="color:var(--accent)" id="statSedang">—</p>
+      <p class="text-xs text-[var(--ink-soft)] mt-1">Sedang ujian</p>
+    </div>
+    <div class="bg-white border border-[var(--line)] rounded-xl p-4">
+      <p class="text-2xl font-display font-semibold" style="color:var(--done)" id="statSelesai">—</p>
+      <p class="text-xs text-[var(--ink-soft)] mt-1">Selesai</p>
+    </div>
+    <div class="bg-white border border-[var(--line)] rounded-xl p-4">
+      <p class="text-2xl font-display font-semibold" style="color:var(--danger)" id="statPelanggaran">—</p>
+      <p class="text-xs text-[var(--ink-soft)] mt-1">Total pelanggaran</p>
+    </div>
+  </div>
+
+  <!-- Filter -->
+  <div class="flex flex-wrap items-center gap-2 mb-3">
+    <input id="cariInput" type="text" placeholder="Cari nama siswa…"
+      class="focus-visible-ring border border-[var(--line)] rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-[var(--accent)] w-full sm:w-56">
+    <div class="flex gap-1.5 flex-wrap" id="filterTabs">
+      <button data-filter="semua" class="filter-btn focus-visible-ring text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--ink)] bg-[var(--ink)] text-white">Semua</button>
+      <button data-filter="belum_mulai" class="filter-btn focus-visible-ring text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--line)]">Belum mulai</button>
+      <button data-filter="sedang_ujian" class="filter-btn focus-visible-ring text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--line)]">Sedang ujian</button>
+      <button data-filter="selesai" class="filter-btn focus-visible-ring text-xs font-medium px-3 py-1.5 rounded-full border border-[var(--line)]">Selesai</button>
+    </div>
+    <button id="btnExport" class="focus-visible-ring ml-auto text-xs font-medium px-3 py-2 rounded-lg border border-[var(--line)] hover:border-[var(--accent)] transition-colors">
+      ⭳ Export rekap
+    </button>
+  </div>
+
+  <!-- Tabel peserta -->
+  <div class="bg-white border border-[var(--line)] rounded-xl overflow-hidden">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-[var(--line)]">
+          <th class="text-left px-4 py-3">Nama</th>
+          <th class="text-left px-4 py-3">Status</th>
+          <th class="text-left px-4 py-3">Progres</th>
+          <th class="text-left px-4 py-3">Mulai</th>
+          <th class="text-left px-4 py-3">Pelanggaran</th>
+          <th class="text-left px-4 py-3">Skor</th>
+        </tr>
+      </thead>
+      <tbody id="tabelBody"></tbody>
+    </table>
+    <p id="emptyState" class="hidden text-center text-sm text-[var(--ink-soft)] py-10">Tidak ada peserta yang cocok dengan pencarian.</p>
+  </div>
+
+</main>
+
+<script>
+/* =========================================================
+   KONFIGURASI SUPABASE — ganti dengan credential project kamu
+   (Project Settings → API di dashboard Supabase)
+   ========================================================= */
+const SUPABASE_URL = 'GANTI_DENGAN_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'GANTI_DENGAN_ANON_KEY';
+const SESI_ID = '11111111-1111-1111-1111-111111111111'; // id dari tabel sesi_ujian
+
+const supabase = (SUPABASE_URL.startsWith('http'))
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+if (!supabase) {
+  console.warn('[Supabase] Belum dikonfigurasi — isi SUPABASE_URL & SUPABASE_ANON_KEY di atas. Panel memakai data contoh.');
+}
+
+/* =========================================================
+   STATE
+   ========================================================= */
+const panelState = {
+  sesiNama: 'Matematika — Tryout Sesi 1',
+  sesiInfo: 'XII IPA 1 · 90 menit',
+  peserta: [],
+  filterAktif: 'semua',
+  kataKunci: ''
+};
+
+/* =========================================================
+   DATA — fetch dari Supabase (fallback ke mock kalau belum
+   dikonfigurasi, biar tetap bisa dites)
+   ========================================================= */
+async function loadPesertaFromSupabase() {
+  if (!supabase) return loadPesertaMock();
+
+  const { data: pesertaRows, error } = await supabase
+    .from('peserta')
+    .select('*')
+    .eq('sesi_id', SESI_ID)
+    .order('created_at', { ascending: true });
+
+  if (error) { console.error('[panel] gagal ambil peserta:', error); return loadPesertaMock(); }
+  if (!pesertaRows || pesertaRows.length === 0) return [];
+
+  const pesertaIds = pesertaRows.map(p => p.id);
+
+  const [{ data: jawabanRows }, { data: logRows }, { data: soalRows }] = await Promise.all([
+    supabase.from('jawaban').select('peserta_id').in('peserta_id', pesertaIds),
+    supabase.from('log_pelanggaran').select('peserta_id').in('peserta_id', pesertaIds),
+    supabase.from('bank_soal').select('id').eq('sesi_id', SESI_ID)
+  ]);
+
+  const totalSoal = soalRows?.length || 0;
+
+  return pesertaRows.map(p => ({
+    id: p.id,
+    nama: p.nama_siswa,
+    status: p.status,
+    terjawab: (jawabanRows || []).filter(j => j.peserta_id === p.id).length,
+    total: totalSoal,
+    mulai: p.waktu_mulai
+      ? new Date(p.waktu_mulai).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      : '—',
+    pelanggaran: (logRows || []).filter(l => l.peserta_id === p.id).length,
+    skor: p.skor
+  }));
+}
+
+function loadPesertaMock() {
+  return [
+    { id: 1, nama: 'Ahmad Fauzan', status: 'selesai', terjawab: 40, total: 40, mulai: '09:02', pelanggaran: 0, skor: 82 },
+    { id: 2, nama: 'Siti Nur Aisyah', status: 'sedang_ujian', terjawab: 27, total: 40, mulai: '09:03', pelanggaran: 1, skor: null },
+    { id: 3, nama: 'Bagas Pratama', status: 'sedang_ujian', terjawab: 15, total: 40, mulai: '09:04', pelanggaran: 3, skor: null },
+    { id: 4, nama: 'Dewi Anggraini', status: 'belum_mulai', terjawab: 0, total: 40, mulai: '—', pelanggaran: 0, skor: null },
+    { id: 5, nama: 'Rangga Saputra', status: 'selesai', terjawab: 40, total: 40, mulai: '09:00', pelanggaran: 0, skor: 76 },
+    { id: 6, nama: 'Putri Wulandari', status: 'sedang_ujian', terjawab: 33, total: 40, mulai: '09:01', pelanggaran: 0, skor: null }
+  ];
+}
+
+/* =========================================================
+   RENDER
+   ========================================================= */
+function render() {
+  document.getElementById('hdrSesiNama').textContent = panelState.sesiNama;
+  document.getElementById('hdrSesiInfo').textContent = panelState.sesiInfo;
+  renderStats();
+  renderTabel();
+}
+
+function renderStats() {
+  const p = panelState.peserta;
+  document.getElementById('statTotal').textContent = p.length;
+  document.getElementById('statSedang').textContent = p.filter(x => x.status === 'sedang_ujian').length;
+  document.getElementById('statSelesai').textContent = p.filter(x => x.status === 'selesai').length;
+  document.getElementById('statPelanggaran').textContent = p.reduce((sum, x) => sum + x.pelanggaran, 0);
+}
+
+function statusLabel(status) {
+  return { belum_mulai: 'Belum mulai', sedang_ujian: 'Sedang ujian', selesai: 'Selesai' }[status];
+}
+
+function renderTabel() {
+  const body = document.getElementById('tabelBody');
+  const filtered = panelState.peserta.filter(x => {
+    const cocokFilter = panelState.filterAktif === 'semua' || x.status === panelState.filterAktif;
+    const cocokKata = x.nama.toLowerCase().includes(panelState.kataKunci.toLowerCase());
+    return cocokFilter && cocokKata;
+  });
+
+  document.getElementById('emptyState').classList.toggle('hidden', filtered.length > 0);
+  body.innerHTML = '';
+
+  filtered.forEach(x => {
+    const tr = document.createElement('tr');
+    tr.className = `border-b border-[var(--line)] last:border-0 ${x.pelanggaran >= 3 ? 'row-flagged' : ''}`;
+
+    const badgeClass = { belum_mulai: 'status-belum', sedang_ujian: 'status-sedang', selesai: 'status-selesai' }[x.status];
+    const dotHtml = x.status === 'sedang_ujian' ? '<span class="dot dot-sedang"></span>' : '';
+    const progresPct = Math.round((x.terjawab / x.total) * 100);
+
+    tr.innerHTML = `
+      <td class="px-4 py-3 font-medium">${x.nama}</td>
+      <td class="px-4 py-3"><span class="status-badge ${badgeClass}">${dotHtml}${statusLabel(x.status)}</span></td>
+      <td class="px-4 py-3">
+        <div class="flex items-center gap-2">
+          <div class="w-20 h-1.5 rounded-full bg-[var(--accent-soft)] overflow-hidden">
+            <div class="h-full bg-[var(--accent)]" style="width:${progresPct}%"></div>
+          </div>
+          <span class="font-mono text-xs text-[var(--ink-soft)]">${x.terjawab}/${x.total}</span>
+        </div>
+      </td>
+      <td class="px-4 py-3 font-mono text-xs text-[var(--ink-soft)]">${x.mulai}</td>
+      <td class="px-4 py-3">
+        ${x.pelanggaran > 0
+          ? `<span class="font-mono text-xs font-semibold" style="color:var(--danger)">${x.pelanggaran}×</span>`
+          : `<span class="font-mono text-xs text-[var(--ink-soft)]">—</span>`}
+      </td>
+      <td class="px-4 py-3 font-mono text-sm font-semibold">${x.skor ?? '—'}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+/* =========================================================
+   REALTIME — Supabase subscription
+   Setiap perubahan di peserta/jawaban/log_pelanggaran memicu
+   refetch ringkas (didebounce), lalu render ulang tabel.
+   ========================================================= */
+let refetchTimeout = null;
+function jadwalkanRefetch() {
+  clearTimeout(refetchTimeout);
+  refetchTimeout = setTimeout(async () => {
+    panelState.peserta = await loadPesertaFromSupabase();
+    render();
+  }, 600);
+}
+
+function subscribeRealtime() {
+  if (!supabase) {
+    console.log('[realtime] Supabase belum dikonfigurasi — memakai data contoh statis.');
+    return;
+  }
+
+  supabase
+    .channel('panel-guru')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'peserta', filter: `sesi_id=eq.${SESI_ID}` }, jadwalkanRefetch)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'jawaban' }, jadwalkanRefetch)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'log_pelanggaran' }, jadwalkanRefetch)
+    .subscribe((status) => {
+      console.log('[realtime] status koneksi:', status);
+    });
+}
+
+/* =========================================================
+   EXPORT REKAP
+   ========================================================= */
+function exportRekap() {
+  const rows = [['Nama', 'Status', 'Terjawab', 'Total Soal', 'Mulai', 'Pelanggaran', 'Skor']];
+  panelState.peserta.forEach(x => {
+    rows.push([x.nama, statusLabel(x.status), x.terjawab, x.total, x.mulai, x.pelanggaran, x.skor ?? '']);
+  });
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `rekap-${panelState.sesiNama.toLowerCase().replace(/\s+/g, '-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* =========================================================
+   EVENTS
+   ========================================================= */
+document.getElementById('cariInput').addEventListener('input', (e) => {
+  panelState.kataKunci = e.target.value;
+  renderTabel();
+});
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    panelState.filterAktif = btn.dataset.filter;
+    document.querySelectorAll('.filter-btn').forEach(b => {
+      b.classList.remove('bg-[var(--ink)]', 'text-white', 'border-[var(--ink)]');
+      b.classList.add('border-[var(--line)]');
+    });
+    btn.classList.add('bg-[var(--ink)]', 'text-white', 'border-[var(--ink)]');
+    btn.classList.remove('border-[var(--line)]');
+    renderTabel();
+  });
+});
+
+document.getElementById('btnExport').addEventListener('click', exportRekap);
+
+/* =========================================================
+   INIT
+   ========================================================= */
+(async function init() {
+  panelState.peserta = await loadPesertaFromSupabase();
+  render();
+  subscribeRealtime();
+})();
+</script>
+</body>
+</html>
