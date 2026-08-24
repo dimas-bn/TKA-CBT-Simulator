@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TKA CBT Simulator — Admin Soal</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --paper:#FAFAF7; --ink:#1B2A4A; --ink-soft:#5B6B8C;
+    --accent:#3E5C8A; --accent-soft:#E8EDF5;
+    --done:#2F7D5E; --done-soft:#E8F3EE;
+    --danger:#B4463C; --danger-soft:#FBEAE8;
+    --line:#E2E5EC;
+  }
+  html,body{background:var(--paper); font-family:'Inter',sans-serif; color:var(--ink);}
+  .font-display{font-family:'Space Grotesk',sans-serif;}
+  .font-mono{font-family:'JetBrains Mono',monospace;}
+  .focus-visible-ring:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
+  input[type=text], input[type=password], textarea, select{
+    border:1.5px solid var(--line); border-radius:0.6rem; padding:0.6rem 0.85rem;
+    background:white; outline:none; font-size:0.9rem; width:100%;
+  }
+  input[type=text]:focus, input[type=password]:focus, textarea:focus, select:focus{ border-color:var(--accent); }
+  label{ font-size:0.8rem; font-weight:600; margin-bottom:0.35rem; display:block; }
+  .tab-btn{ padding:0.6rem 1.1rem; border-radius:0.6rem 0.6rem 0 0; font-size:0.875rem; font-weight:600; cursor:pointer; border:1.5px solid transparent; }
+  .tab-btn.active{ background:white; border-color:var(--line); border-bottom-color:white; color:var(--ink); }
+  .tab-btn:not(.active){ color:var(--ink-soft); }
+  .panel{ background:white; border:1.5px solid var(--line); border-radius:0 0.75rem 0.75rem 0.75rem; padding:1.5rem; }
+  .btn-primary{ background:var(--ink); color:white; font-weight:600; padding:0.7rem 1.4rem; border-radius:0.6rem; transition:background .15s; }
+  .btn-primary:hover{ background:var(--accent); }
+  .btn-primary:disabled{ opacity:0.5; cursor:not-allowed; }
+  .btn-secondary{ background:white; border:1.5px solid var(--line); font-weight:600; padding:0.6rem 1.2rem; border-radius:0.6rem; }
+  .btn-secondary:hover{ border-color:var(--accent); }
+  .alert-box{ border-radius:0.6rem; padding:0.75rem 1rem; font-size:0.85rem; }
+  .alert-success{ background:var(--done-soft); color:var(--done); }
+  .alert-error{ background:var(--danger-soft); color:var(--danger); }
+  table.preview{ width:100%; font-size:0.78rem; border-collapse:collapse; }
+  table.preview th{ text-align:left; padding:0.5rem; background:var(--accent-soft); font-family:'JetBrains Mono',monospace; font-size:0.65rem; text-transform:uppercase; }
+  table.preview td{ padding:0.5rem; border-bottom:1px solid var(--line); vertical-align:top; }
+</style>
+</head>
+<body class="min-h-screen">
+
+  <!-- ============ GATE PASSPHRASE ============ -->
+  <div id="gateScreen" class="min-h-screen flex items-center justify-center p-6">
+    <div class="max-w-sm w-full text-center">
+      <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-3">Akses Terbatas</p>
+      <h1 class="font-display text-xl font-semibold mb-6">Kode Akses Admin</h1>
+      <input type="password" id="passInput" placeholder="Masukkan kode akses" class="text-center mb-3">
+      <button id="btnUnlock" class="btn-primary w-full focus-visible-ring">Masuk</button>
+      <p id="gateError" class="text-sm text-[var(--danger)] mt-3 hidden">Kode akses salah.</p>
+    </div>
+  </div>
+
+  <!-- ============ ADMIN SCREEN ============ -->
+  <div id="adminScreen" class="hidden max-w-4xl mx-auto px-5 py-8">
+
+    <div class="mb-6">
+      <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-1">TKA CBT Simulator</p>
+      <h1 class="font-display text-2xl font-semibold">Kelola Bank Soal</h1>
+    </div>
+
+    <div id="alertBox" class="hidden alert-box mb-4"></div>
+
+    <div class="flex gap-1 mb-0">
+      <button class="tab-btn active" data-tab="manual">Tambah Manual</button>
+      <button class="tab-btn" data-tab="import">Import Massal</button>
+    </div>
+
+    <!-- TAB: MANUAL -->
+    <div id="tabManual" class="panel">
+      <div class="mb-4">
+        <label for="manualSesi">Sesi / Mapel</label>
+        <select id="manualSesi"></select>
+      </div>
+
+      <div class="mb-4">
+        <label for="manualTeks">Teks soal</label>
+        <textarea id="manualTeks" rows="3" placeholder="Tulis pertanyaan di sini…"></textarea>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-3 mb-4">
+        <div><label for="opsiA">Opsi A</label><input type="text" id="opsiA"></div>
+        <div><label for="opsiB">Opsi B</label><input type="text" id="opsiB"></div>
+        <div><label for="opsiC">Opsi C</label><input type="text" id="opsiC"></div>
+        <div><label for="opsiD">Opsi D</label><input type="text" id="opsiD"></div>
+        <div><label for="opsiE">Opsi E</label><input type="text" id="opsiE"></div>
+        <div>
+          <label for="manualKunci">Kunci jawaban</label>
+          <select id="manualKunci">
+            <option value="a">A</option><option value="b">B</option><option value="c">C</option>
+            <option value="d">D</option><option value="e">E</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-3 mb-4">
+        <div>
+          <label for="manualKompetensi">Kompetensi</label>
+          <input type="text" id="manualKompetensi" placeholder="mis. Aljabar, Grammar, dst">
+        </div>
+        <div>
+          <label>Urutan (otomatis)</label>
+          <input type="text" id="manualUrutan" disabled>
+        </div>
+      </div>
+
+      <div class="mb-5">
+        <label for="manualPembahasan">Pembahasan</label>
+        <textarea id="manualPembahasan" rows="2" placeholder="Penjelasan jawaban benar…"></textarea>
+      </div>
+
+      <button id="btnSimpanManual" class="btn-primary focus-visible-ring">Simpan Soal</button>
+    </div>
+
+    <!-- TAB: IMPORT -->
+    <div id="tabImport" class="panel hidden">
+      <div class="mb-4">
+        <label for="importSesi">Sesi / Mapel tujuan</label>
+        <select id="importSesi"></select>
+      </div>
+
+      <div class="mb-4 flex items-center gap-3">
+        <a id="btnTemplate" class="btn-secondary focus-visible-ring text-sm cursor-pointer">⭳ Download template CSV</a>
+        <span class="text-xs text-[var(--ink-soft)]">Isi template ini, lalu upload kembali di bawah.</span>
+      </div>
+
+      <div class="mb-4">
+        <label for="fileImport">Upload file (.csv atau .xlsx)</label>
+        <input type="file" id="fileImport" accept=".csv,.xlsx,.xls">
+      </div>
+
+      <div id="previewWrap" class="hidden mb-5">
+        <p class="text-sm font-medium mb-2"><span id="previewCount">0</span> baris siap diimpor:</p>
+        <div class="overflow-x-auto border border-[var(--line)] rounded-lg" style="max-height:320px; overflow-y:auto;">
+          <table class="preview" id="previewTable"></table>
+        </div>
+      </div>
+
+      <button id="btnImport" class="btn-primary focus-visible-ring" disabled>Import Soal</button>
+    </div>
+
+  </div>
+
+<script>
+/* =========================================================
+   KONFIGURASI — ganti sesuai project kamu
+   ========================================================= */
+const SUPABASE_URL = 'https://idbqhtjsvowncprmvgcu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkYnFodGpzdm93bmNwcm12Z2N1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NzI2NTQsImV4cCI6MjEwMzA0ODY1NH0.BpUxwo_oJO4TIl7Nleghtp7rIRIx8O7ojsxxvvX-BqA';
+
+// GANTI kode akses ini sebelum deploy — ini bukan keamanan kuat,
+// cuma penghalang dasar biar tidak sembarang orang bisa masuk.
+const KODE_AKSES_ADMIN = 'guruSMANSABA2026';
+
+const supabaseClient = (SUPABASE_URL.startsWith('http'))
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+let daftarSesi = [];
+
+/* =========================================================
+   GATE
+   ========================================================= */
+document.getElementById('btnUnlock').addEventListener('click', cekPassphrase);
+document.getElementById('passInput').addEventListener('keydown', e => { if (e.key === 'Enter') cekPassphrase(); });
+
+function cekPassphrase() {
+  const val = document.getElementById('passInput').value;
+  if (val === KODE_AKSES_ADMIN) {
+    document.getElementById('gateScreen').classList.add('hidden');
+    document.getElementById('adminScreen').classList.remove('hidden');
+    initAdmin();
+  } else {
+    document.getElementById('gateError').classList.remove('hidden');
+  }
+}
+
+/* =========================================================
+   INIT — muat daftar sesi untuk dropdown
+   ========================================================= */
+async function initAdmin() {
+  if (!supabaseClient) {
+    tampilkanAlert('error', 'Supabase belum dikonfigurasi.');
+    return;
+  }
+  const { data, error } = await supabaseClient
+    .from('sesi_ujian')
+    .select('id, nama_sesi, mapel')
+    .order('created_at', { ascending: true });
+
+  if (error) { tampilkanAlert('error', 'Gagal memuat daftar sesi: ' + error.message); return; }
+  daftarSesi = data || [];
+
+  const opsiHtml = daftarSesi.map(s => `<option value="${s.id}">${s.nama_sesi}</option>`).join('');
+  document.getElementById('manualSesi').innerHTML = opsiHtml;
+  document.getElementById('importSesi').innerHTML = opsiHtml;
+
+  if (daftarSesi.length > 0) {
+    updateUrutanOtomatis(daftarSesi[0].id);
+  }
+}
+
+document.getElementById('manualSesi').addEventListener('change', e => updateUrutanOtomatis(e.target.value));
+
+async function updateUrutanOtomatis(sesiId) {
+  const { data } = await supabaseClient
+    .from('bank_soal')
+    .select('urutan')
+    .eq('sesi_id', sesiId)
+    .order('urutan', { ascending: false })
+    .limit(1);
+  const next = (data && data.length > 0) ? data[0].urutan + 1 : 1;
+  document.getElementById('manualUrutan').value = next;
+}
+
+/* =========================================================
+   TABS
+   ========================================================= */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tabManual').classList.toggle('hidden', btn.dataset.tab !== 'manual');
+    document.getElementById('tabImport').classList.toggle('hidden', btn.dataset.tab !== 'import');
+  });
+});
+
+/* =========================================================
+   ALERT HELPER
+   ========================================================= */
+function tampilkanAlert(tipe, pesan) {
+  const box = document.getElementById('alertBox');
+  box.className = `alert-box mb-4 ${tipe === 'success' ? 'alert-success' : 'alert-error'}`;
+  box.textContent = pesan;
+  box.classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  setTimeout(() => box.classList.add('hidden'), 6000);
+}
+
+/* =========================================================
+   TAMBAH MANUAL
+   ========================================================= */
+document.getElementById('btnSimpanManual').addEventListener('click', async () => {
+  const sesiId = document.getElementById('manualSesi').value;
+  const sesi = daftarSesi.find(s => s.id === sesiId);
+  const teks = document.getElementById('manualTeks').value.trim();
+  const opsi = {
+    a: document.getElementById('opsiA').value.trim(),
+    b: document.getElementById('opsiB').value.trim(),
+    c: document.getElementById('opsiC').value.trim(),
+    d: document.getElementById('opsiD').value.trim(),
+    e: document.getElementById('opsiE').value.trim()
+  };
+  const kunci = document.getElementById('manualKunci').value;
+  const kompetensi = document.getElementById('manualKompetensi').value.trim();
+  const pembahasan = document.getElementById('manualPembahasan').value.trim();
+  const urutan = parseInt(document.getElementById('manualUrutan').value, 10);
+
+  if (!teks || !opsi.a || !opsi.b || !opsi.c || !opsi.d || !opsi.e || !kompetensi) {
+    tampilkanAlert('error', 'Lengkapi teks soal, semua opsi (A–E), dan kompetensi terlebih dahulu.');
+    return;
+  }
+
+  const btn = document.getElementById('btnSimpanManual');
+  btn.disabled = true;
+  btn.textContent = 'Menyimpan…';
+
+  const { error } = await supabaseClient.from('bank_soal').insert({
+    id: crypto.randomUUID(),
+    sesi_id: sesiId,
+    mapel: sesi ? sesi.mapel : '',
+    urutan,
+    teks, opsi,
+    kunci_jawaban: kunci,
+    kompetensi,
+    pembahasan
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Simpan Soal';
+
+  if (error) {
+    tampilkanAlert('error', 'Gagal menyimpan: ' + error.message);
+    return;
+  }
+
+  tampilkanAlert('success', 'Soal berhasil disimpan.');
+  ['manualTeks', 'opsiA', 'opsiB', 'opsiC', 'opsiD', 'opsiE', 'manualPembahasan'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('manualKompetensi').value = '';
+  updateUrutanOtomatis(sesiId);
+});
+
+/* =========================================================
+   IMPORT MASSAL
+   ========================================================= */
+document.getElementById('btnTemplate').addEventListener('click', downloadTemplate);
+
+function downloadTemplate() {
+  const header = ['teks', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e', 'kunci_jawaban', 'kompetensi', 'pembahasan'];
+  const contoh = [
+    'Contoh: Ibu kota Indonesia adalah…', 'Jakarta', 'Bandung', 'Surabaya', 'Medan', 'Semarang',
+    'a', 'Pengetahuan Umum', 'Jakarta adalah ibu kota Indonesia.'
+  ];
+  const csv = header.join(',') + '\n' + contoh.map(v => `"${v.replace(/"/g, '""')}"`).join(',');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'template-soal.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+let dataImportSiap = [];
+
+document.getElementById('fileImport').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+  const kolomWajib = ['teks', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'opsi_e', 'kunci_jawaban'];
+  const kolomHilang = kolomWajib.filter(k => !(k in (rows[0] || {})));
+  if (rows.length === 0 || kolomHilang.length > 0) {
+    tampilkanAlert('error', `File tidak sesuai template. Kolom hilang: ${kolomHilang.join(', ') || 'file kosong'}.`);
+    dataImportSiap = [];
+    document.getElementById('previewWrap').classList.add('hidden');
+    document.getElementById('btnImport').disabled = true;
+    return;
+  }
+
+  dataImportSiap = rows.map(r => ({
+    teks: String(r.teks || '').trim(),
+    opsi: { a: String(r.opsi_a || '').trim(), b: String(r.opsi_b || '').trim(), c: String(r.opsi_c || '').trim(), d: String(r.opsi_d || '').trim(), e: String(r.opsi_e || '').trim() },
+    kunci_jawaban: String(r.kunci_jawaban || '').trim().toLowerCase(),
+    kompetensi: String(r.kompetensi || '').trim(),
+    pembahasan: String(r.pembahasan || '').trim()
+  })).filter(r => r.teks);
+
+  renderPreview(dataImportSiap);
+  document.getElementById('btnImport').disabled = dataImportSiap.length === 0;
+});
+
+function renderPreview(rows) {
+  document.getElementById('previewCount').textContent = rows.length;
+  const table = document.getElementById('previewTable');
+  table.innerHTML = `
+    <thead><tr><th>Teks</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>Kunci</th><th>Kompetensi</th></tr></thead>
+    <tbody>${rows.map(r => `
+      <tr>
+        <td>${r.teks}</td>
+        <td>${r.opsi.a}</td><td>${r.opsi.b}</td><td>${r.opsi.c}</td><td>${r.opsi.d}</td><td>${r.opsi.e}</td>
+        <td class="font-mono uppercase">${r.kunci_jawaban}</td>
+        <td>${r.kompetensi}</td>
+      </tr>`).join('')}</tbody>`;
+  document.getElementById('previewWrap').classList.remove('hidden');
+}
+
+document.getElementById('btnImport').addEventListener('click', async () => {
+  const sesiId = document.getElementById('importSesi').value;
+  const sesi = daftarSesi.find(s => s.id === sesiId);
+  if (!sesi) { tampilkanAlert('error', 'Pilih sesi tujuan terlebih dahulu.'); return; }
+
+  const btn = document.getElementById('btnImport');
+  btn.disabled = true;
+  btn.textContent = 'Mengimpor…';
+
+  const { data: existing } = await supabaseClient
+    .from('bank_soal')
+    .select('urutan')
+    .eq('sesi_id', sesiId)
+    .order('urutan', { ascending: false })
+    .limit(1);
+  let urutanMulai = (existing && existing.length > 0) ? existing[0].urutan + 1 : 1;
+
+  const payload = dataImportSiap.map((r, i) => ({
+    id: crypto.randomUUID(),
+    sesi_id: sesiId,
+    mapel: sesi.mapel,
+    urutan: urutanMulai + i,
+    teks: r.teks,
+    opsi: r.opsi,
+    kunci_jawaban: r.kunci_jawaban,
+    kompetensi: r.kompetensi || 'Umum',
+    pembahasan: r.pembahasan
+  }));
+
+  const { error } = await supabaseClient.from('bank_soal').insert(payload);
+
+  btn.disabled = false;
+  btn.textContent = 'Import Soal';
+
+  if (error) {
+    tampilkanAlert('error', 'Gagal impor: ' + error.message);
+    return;
+  }
+
+  tampilkanAlert('success', `${payload.length} soal berhasil diimpor.`);
+  dataImportSiap = [];
+  document.getElementById('previewWrap').classList.add('hidden');
+  document.getElementById('fileImport').value = '';
+  document.getElementById('btnImport').disabled = true;
+});
+</script>
+</body>
+</html>

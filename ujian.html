@@ -202,6 +202,12 @@
         </div>
       </div>
 
+      <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-3">Analisis per kompetensi</p>
+      <div class="bg-white border border-[var(--line)] rounded-xl p-5 mb-8">
+        <div id="hasilKompetensiWrap" class="flex justify-center"></div>
+        <p class="text-xs text-[var(--ink-soft)] text-center mt-2">Semakin dekat ke tepi, semakin kuat penguasaan pada kompetensi tersebut.</p>
+      </div>
+
       <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-3">Review jawaban &amp; pembahasan</p>
       <div id="hasilReviewList" class="space-y-3"></div>
 
@@ -593,17 +599,34 @@ function loadPembahasanMock() {
 
 function hitungHasil(pembahasanList) {
   let benar = 0, salah = 0, kosong = 0;
+  const kompetensiMap = {}; // { "Aljabar": { benar: 2, total: 3 } }
+
   const detail = pembahasanList.map(soal => {
     const jawabanSiswa = examState.jawaban[soal.id] || null;
     let status;
     if (!jawabanSiswa) { status = 'kosong'; kosong++; }
     else if (jawabanSiswa === soal.kunci_jawaban) { status = 'benar'; benar++; }
     else { status = 'salah'; salah++; }
+
+    const kompetensi = soal.kompetensi || 'Umum';
+    if (!kompetensiMap[kompetensi]) kompetensiMap[kompetensi] = { benar: 0, total: 0 };
+    kompetensiMap[kompetensi].total++;
+    if (status === 'benar') kompetensiMap[kompetensi].benar++;
+
     return { ...soal, jawabanSiswa, status };
   });
+
   const total = pembahasanList.length;
   const skor = total > 0 ? Math.round((benar / total) * 100) : 0;
-  return { skor, benar, salah, kosong, total, detail };
+
+  const kompetensiData = Object.entries(kompetensiMap).map(([label, v]) => ({
+    label,
+    persen: Math.round((v.benar / v.total) * 100),
+    benar: v.benar,
+    total: v.total
+  }));
+
+  return { skor, benar, salah, kosong, total, detail, kompetensiData };
 }
 
 function tampilkanHasil(hasil, otomatis) {
@@ -641,6 +664,82 @@ function tampilkanHasil(hasil, otomatis) {
         ${soal.pembahasan ? `<div class="pembahasan-box"><strong>Pembahasan:</strong> ${soal.pembahasan}</div>` : ''}
       </div>`;
   }).join('');
+
+  renderKompetensiChart(hasil.kompetensiData);
+}
+
+/* =========================================================
+   RADAR CHART KOMPETENSI — SVG murni, fallback ke bar list
+   kalau kompetensinya kurang dari 3 (radar butuh minimal 3 sisi
+   biar bentuknya bermakna).
+   ========================================================= */
+function renderKompetensiChart(data) {
+  const wrap = document.getElementById('hasilKompetensiWrap');
+  if (!data || data.length === 0) {
+    wrap.innerHTML = `<p class="text-sm text-[var(--ink-soft)] py-6">Belum ada data kompetensi untuk sesi ini.</p>`;
+    return;
+  }
+  wrap.innerHTML = data.length >= 3 ? renderRadarSvg(data) : renderKompetensiBars(data);
+}
+
+function renderKompetensiBars(data) {
+  return `<div class="w-full max-w-sm space-y-3">` + data.map(d => `
+    <div>
+      <div class="flex justify-between text-sm mb-1">
+        <span class="font-medium">${d.label}</span>
+        <span class="font-mono text-[var(--ink-soft)]">${d.benar}/${d.total}</span>
+      </div>
+      <div class="w-full h-2 rounded-full bg-[var(--accent-soft)] overflow-hidden">
+        <div class="h-full bg-[var(--accent)]" style="width:${d.persen}%"></div>
+      </div>
+    </div>`).join('') + `</div>`;
+}
+
+function renderRadarSvg(data) {
+  const size = 320, center = size / 2, maxRadius = 105;
+  const n = data.length;
+  const angleStep = (2 * Math.PI) / n;
+  const startAngle = -Math.PI / 2;
+
+  const pointAt = (i, ratio) => {
+    const angle = startAngle + i * angleStep;
+    return [center + maxRadius * ratio * Math.cos(angle), center + maxRadius * ratio * Math.sin(angle)];
+  };
+
+  // Grid ring polygons (25/50/75/100%)
+  const gridRings = [0.25, 0.5, 0.75, 1].map(ratio => {
+    const pts = data.map((_, i) => pointAt(i, ratio).join(',')).join(' ');
+    return `<polygon points="${pts}" style="fill:none;stroke:var(--line);stroke-width:1"/>`;
+  }).join('');
+
+  // Axis lines from center to edge
+  const axisLines = data.map((_, i) => {
+    const [x, y] = pointAt(i, 1);
+    return `<line x1="${center}" y1="${center}" x2="${x}" y2="${y}" style="stroke:var(--line);stroke-width:1"/>`;
+  }).join('');
+
+  // Data polygon
+  const dataPts = data.map((d, i) => pointAt(i, d.persen / 100).join(',')).join(' ');
+  const dataPolygon = `<polygon points="${dataPts}" style="fill:var(--accent);fill-opacity:0.18;stroke:var(--accent);stroke-width:2"/>`;
+
+  // Data dots
+  const dots = data.map((d, i) => {
+    const [x, y] = pointAt(i, d.persen / 100);
+    return `<circle cx="${x}" cy="${y}" r="4" style="fill:white;stroke:var(--accent);stroke-width:2"/>`;
+  }).join('');
+
+  // Labels
+  const labels = data.map((d, i) => {
+    const [x, y] = pointAt(i, 1.24);
+    const anchor = Math.abs(x - center) < 8 ? 'middle' : (x < center ? 'end' : 'start');
+    return `
+      <text x="${x}" y="${y - 5}" text-anchor="${anchor}" style="font-family:'Inter',sans-serif;font-size:11px;font-weight:600;fill:var(--ink)">${d.label}</text>
+      <text x="${x}" y="${y + 9}" text-anchor="${anchor}" style="font-family:'JetBrains Mono',monospace;font-size:10px;fill:var(--ink-soft)">${d.persen}%</text>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${size} ${size}" width="100%" style="max-width:360px">
+    ${gridRings}${axisLines}${dataPolygon}${dots}${labels}
+  </svg>`;
 }
 
 /* =========================================================
