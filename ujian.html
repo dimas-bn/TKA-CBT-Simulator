@@ -58,6 +58,15 @@
     #timer.critical{ animation:none; }
   }
   .focus-visible-ring:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
+  .review-card{ border:1.5px solid var(--line); border-radius:0.75rem; background:white; padding:1.25rem; }
+  .review-opsi{ border-radius:0.5rem; padding:0.6rem 0.9rem; font-size:0.875rem; border:1.5px solid var(--line); display:flex; align-items:center; gap:0.6rem; }
+  .review-opsi.opsi-benar{ background:var(--done-soft); border-color:var(--done); color:var(--done); font-weight:600; }
+  .review-opsi.opsi-salah-dipilih{ background:var(--danger-soft); border-color:var(--danger); color:var(--danger); font-weight:600; }
+  .review-badge{ font-size:0.7rem; font-weight:700; padding:0.2rem 0.6rem; border-radius:9999px; font-family:'JetBrains Mono',monospace; }
+  .review-badge.badge-benar{ background:var(--done-soft); color:var(--done); }
+  .review-badge.badge-salah{ background:var(--danger-soft); color:var(--danger); }
+  .review-badge.badge-kosong{ background:#F1F2F5; color:var(--ink-soft); }
+  .pembahasan-box{ background:var(--accent-soft); border-radius:0.5rem; padding:0.85rem 1rem; font-size:0.85rem; color:var(--ink); margin-top:0.75rem; line-height:1.5; }
   #violationToast{ transition: transform .25s ease, opacity .25s ease; }
 </style>
 </head>
@@ -165,6 +174,37 @@
           </div>
         </div>
       </aside>
+    </div>
+  </div>
+
+  <!-- ============ HASIL SCREEN ============ -->
+  <div id="hasilScreen" class="hidden min-h-screen">
+    <div class="max-w-3xl mx-auto px-5 py-10">
+
+      <div class="text-center mb-8">
+        <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-2" id="hasilSesiNama">—</p>
+        <p class="text-6xl font-display font-bold mb-2" id="hasilSkor">—</p>
+        <p class="text-sm text-[var(--ink-soft)]" id="hasilRingkasan">—</p>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 mb-8">
+        <div class="bg-white border border-[var(--line)] rounded-xl p-4 text-center">
+          <p class="text-2xl font-display font-semibold" style="color:var(--done)" id="hasilBenar">—</p>
+          <p class="text-xs text-[var(--ink-soft)] mt-1">Benar</p>
+        </div>
+        <div class="bg-white border border-[var(--line)] rounded-xl p-4 text-center">
+          <p class="text-2xl font-display font-semibold" style="color:var(--danger)" id="hasilSalah">—</p>
+          <p class="text-xs text-[var(--ink-soft)] mt-1">Salah</p>
+        </div>
+        <div class="bg-white border border-[var(--line)] rounded-xl p-4 text-center">
+          <p class="text-2xl font-display font-semibold text-[var(--ink-soft)]" id="hasilKosong">—</p>
+          <p class="text-xs text-[var(--ink-soft)] mt-1">Kosong</p>
+        </div>
+      </div>
+
+      <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-3">Review jawaban &amp; pembahasan</p>
+      <div id="hasilReviewList" class="space-y-3"></div>
+
     </div>
   </div>
 
@@ -501,6 +541,8 @@ async function submitUjian(otomatis = false) {
   document.getElementById('confirmModal').classList.add('hidden');
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 
+  // Tandai selesai DULU — function get_pembahasan() di server hanya
+  // mau kasih kunci jawaban kalau status peserta sudah 'selesai'.
   if (supabaseClient) {
     const { error } = await supabaseClient
       .from('peserta')
@@ -509,14 +551,96 @@ async function submitUjian(otomatis = false) {
     if (error) console.error('[submit] gagal update status peserta:', error);
   }
 
-  document.body.innerHTML = `
-    <div class="min-h-screen flex items-center justify-center p-6">
-      <div class="max-w-sm text-center">
-        <p class="font-mono text-xs tracking-widest text-[var(--ink-soft)] uppercase mb-3">${otomatis ? 'Waktu habis' : 'Selesai'}</p>
-        <h1 class="font-display text-xl font-semibold mb-2">Ujian telah dikumpulkan</h1>
-        <p class="text-sm text-[var(--ink-soft)]">Hasil akan tersedia setelah sesi ditutup guru.</p>
-      </div>
-    </div>`;
+  const pembahasanList = await loadPembahasan(examState.pesertaId, examState.sesiId);
+  const hasil = hitungHasil(pembahasanList);
+
+  if (supabaseClient) {
+    const { error } = await supabaseClient
+      .from('peserta')
+      .update({ skor: hasil.skor })
+      .eq('id', examState.pesertaId);
+    if (error) console.error('[submit] gagal simpan skor:', error);
+  }
+
+  tampilkanHasil(hasil, otomatis);
+}
+
+/* =========================================================
+   HALAMAN HASIL — pembahasan diambil lewat RPC get_pembahasan(),
+   bukan query langsung ke bank_soal. Function itu sendiri yang
+   memvalidasi status peserta = 'selesai' di server, jadi tidak
+   bisa dilewati lewat manipulasi kode di browser.
+   ========================================================= */
+async function loadPembahasan(pesertaId, sesiId) {
+  if (!supabaseClient) return loadPembahasanMock();
+
+  const { data, error } = await supabaseClient.rpc('get_pembahasan', { p_peserta_id: pesertaId });
+
+  if (error || !data || data.length === 0) {
+    console.error('[loadPembahasan] gagal ambil via RPC:', error);
+    return loadPembahasanMock();
+  }
+  return data;
+}
+
+function loadPembahasanMock() {
+  return [
+    { id: 'mat-001', teks: 'Sebuah kolam renang berbentuk balok dengan panjang 12 m, lebar 6 m, dan kedalaman 2 m. Volume air yang dibutuhkan untuk mengisi penuh kolam tersebut adalah…', opsi: { a: '120 m³', b: '144 m³', c: '132 m³', d: '156 m³', e: '168 m³' }, kunci_jawaban: 'b', pembahasan: 'Volume balok = panjang × lebar × tinggi = 12 × 6 × 2 = 144 m³.' },
+    { id: 'mat-002', teks: 'Jika 3x − 7 = 2x + 5, maka nilai x adalah…', opsi: { a: '10', b: '11', c: '12', d: '13', e: '14' }, kunci_jawaban: 'c', pembahasan: '3x − 7 = 2x + 5 → 3x − 2x = 5 + 7 → x = 12.' },
+    { id: 'mat-003', teks: 'Median dari data: 7, 9, 5, 8, 10, 6, 9 adalah…', opsi: { a: '7', b: '8', c: '9', d: '10', e: '6' }, kunci_jawaban: 'b', pembahasan: 'Urutkan data: 5, 6, 7, 8, 9, 9, 10. Median (data tengah ke-4) = 8.' }
+  ];
+}
+
+function hitungHasil(pembahasanList) {
+  let benar = 0, salah = 0, kosong = 0;
+  const detail = pembahasanList.map(soal => {
+    const jawabanSiswa = examState.jawaban[soal.id] || null;
+    let status;
+    if (!jawabanSiswa) { status = 'kosong'; kosong++; }
+    else if (jawabanSiswa === soal.kunci_jawaban) { status = 'benar'; benar++; }
+    else { status = 'salah'; salah++; }
+    return { ...soal, jawabanSiswa, status };
+  });
+  const total = pembahasanList.length;
+  const skor = total > 0 ? Math.round((benar / total) * 100) : 0;
+  return { skor, benar, salah, kosong, total, detail };
+}
+
+function tampilkanHasil(hasil, otomatis) {
+  document.getElementById('examScreen').classList.add('hidden');
+  document.getElementById('hasilScreen').classList.remove('hidden');
+  document.body.classList.remove('exam-locked');
+
+  document.getElementById('hasilSesiNama').textContent = `${otomatis ? 'Waktu habis · ' : ''}${examState.sesiNama}`;
+  document.getElementById('hasilSkor').textContent = hasil.skor;
+  document.getElementById('hasilRingkasan').textContent = `${hasil.benar} dari ${hasil.total} soal terjawab benar`;
+  document.getElementById('hasilBenar').textContent = hasil.benar;
+  document.getElementById('hasilSalah').textContent = hasil.salah;
+  document.getElementById('hasilKosong').textContent = hasil.kosong;
+
+  const list = document.getElementById('hasilReviewList');
+  list.innerHTML = hasil.detail.map((soal, i) => {
+    const badgeClass = { benar: 'badge-benar', salah: 'badge-salah', kosong: 'badge-kosong' }[soal.status];
+    const badgeLabel = { benar: 'Benar', salah: 'Salah', kosong: 'Kosong' }[soal.status];
+
+    const opsiHtml = Object.entries(soal.opsi).map(([key, teks]) => {
+      let cls = '';
+      if (key === soal.kunci_jawaban) cls = 'opsi-benar';
+      else if (key === soal.jawabanSiswa && soal.status === 'salah') cls = 'opsi-salah-dipilih';
+      return `<div class="review-opsi ${cls}"><span class="font-mono font-bold">${key.toUpperCase()}</span><span>${teks}</span></div>`;
+    }).join('');
+
+    return `
+      <div class="review-card">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <p class="text-sm font-medium">Soal ${i + 1}</p>
+          <span class="review-badge ${badgeClass}">${badgeLabel}</span>
+        </div>
+        <p class="text-sm mb-4 leading-relaxed">${soal.teks}</p>
+        <div class="space-y-2">${opsiHtml}</div>
+        ${soal.pembahasan ? `<div class="pembahasan-box"><strong>Pembahasan:</strong> ${soal.pembahasan}</div>` : ''}
+      </div>`;
+  }).join('');
 }
 
 /* =========================================================
